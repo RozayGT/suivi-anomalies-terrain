@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Suivi Anomalies Terrain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#161a20;
+    --bg-alt:#11151a;
+    --panel:#1e242c;
+    --panel-2:#252c35;
+    --line:#333c48;
+    --text:#EDEFF3;
+    --text-dim:#8f99a8;
+    --text-faint:#5c6673;
+    --accent:#5B9BD8;
+    --accent-dim:#3a4a5a;
+    --red:#E5484D;
+    --red-bg:rgba(229,72,77,0.14);
+    --amber:#F2A93C;
+    --amber-bg:rgba(242,169,60,0.14);
+    --green:#3DBE79;
+    --green-bg:rgba(61,190,121,0.14);
+    --violet:#A78BFA;
+    --violet-bg:rgba(167,139,250,0.16);
+    --radius:12px;
+    --shadow:0 8px 24px rgba(0,0,0,0.35);
+  }
+  *,*::before,*::after{box-sizing:border-box;}
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important; transition:none !important;}
+  }
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',system-ui,sans-serif;
+    font-size:15px;
+    line-height:1.45;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{font-family:'Oswald',sans-serif; margin:0; letter-spacing:0.02em;}
+  button{font-family:inherit;}
+  input,select,textarea{font-family:inherit; font-size:15px;}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+  a{color:var(--accent);}
+
+  #app{max-width:640px; margin:0 auto; padding-bottom:96px; min-height:100vh; background:var(--bg); position:relative;}
+
+  /* ---------- Header ---------- */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 16px 14px; background:linear-gradient(180deg, var(--bg-alt), var(--bg));
+    border-bottom:1px solid var(--line);
+    position:sticky; top:0; z-index:20;
+  }
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand-mark{
+    display:flex; flex-direction:column; gap:3px; width:14px;
+  }
+  .brand-mark span{display:block; height:2px; background:var(--accent); border-radius:1px;}
+  .brand-mark span:nth-child(2){background:var(--amber);}
+  .brand-mark span:nth-child(3){background:var(--green);}
+  .brand h1{font-size:19px; font-weight:600; text-transform:uppercase; color:var(--text);}
+  .brand-sub{margin:1px 0 0; font-size:11.5px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace; letter-spacing:0.03em;}
+  .header-actions{display:flex; align-items:center; gap:6px;}
+  .icon-btn{
+    background:var(--panel); border:1px solid var(--line); color:var(--text);
+    width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:16px; cursor:pointer;
+  }
+  .icon-btn:active{background:var(--panel-2);}
+
+  .sync-row{
+    display:flex; align-items:center; gap:6px; padding:0 16px 12px;
+    font-size:11.5px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace;
+  }
+  .sync-dot{width:6px;height:6px;border-radius:50%; background:var(--green); flex-shrink:0;}
+  @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:0.35;}}
+  .sync-dot.live{animation:pulse 2.4s ease-in-out infinite;}
+
+  /* ---------- Stats ---------- */
+  .stats-bar{display:flex; gap:8px; padding:0 16px 14px;}
+  .stat-pill{
+    flex:1; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:9px 8px; text-align:center;
+  }
+  .stat-pill .num{font-family:'IBM Plex Mono',monospace; font-size:19px; font-weight:600; display:block;}
+  .stat-pill .lbl{font-size:10.5px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em;}
+  .stat-pill.red .num{color:var(--red);}
+  .stat-pill.amber .num{color:var(--amber);}
+  .stat-pill.green .num{color:var(--green);}
+
+  /* ---------- Controls ---------- */
+  .controls{padding:0 16px 12px;}
+  .chips{display:flex; gap:6px; overflow-x:auto; padding-bottom:10px; scrollbar-width:none;}
+  .chips::-webkit-scrollbar{display:none;}
+  .chip{
+    flex-shrink:0; background:var(--panel); border:1px solid var(--line); color:var(--text-dim);
+    border-radius:999px; padding:7px 13px; font-size:13px; cursor:pointer; white-space:nowrap;
+  }
+  .chip[data-active="true"]{background:var(--accent); border-color:var(--accent); color:#0d1116; font-weight:600;}
+  .search-wrap{position:relative;}
+  #searchInput{
+    width:100%; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    color:var(--text); padding:10px 12px; outline-offset:2px;
+  }
+  #searchInput::placeholder{color:var(--text-faint);}
+
+  /* ---------- Category rail ---------- */
+  .rail{padding:4px 16px 12px; border-left:2px solid var(--line); margin:0 16px 0 22px;}
+  .category{background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--line); border-radius:var(--radius); margin-bottom:10px; overflow:hidden;}
+  .category[data-worst="red"]{border-left-color:var(--red);}
+  .category[data-worst="amber"]{border-left-color:var(--amber);}
+  .category[data-worst="green"]{border-left-color:var(--green);}
+  .category-header{
+    display:flex; align-items:center; gap:10px; padding:13px 14px; cursor:pointer;
+  }
+  .category-header .cat-label{
+    font-family:'Oswald',sans-serif; text-transform:uppercase; font-size:14.5px; letter-spacing:0.03em; flex:1;
+  }
+  .cat-counts{display:flex; gap:5px; align-items:center;}
+  .mini-count{font-family:'IBM Plex Mono',monospace; font-size:11.5px; padding:2px 6px; border-radius:6px; min-width:20px; text-align:center;}
+  .mini-count.red{background:var(--red-bg); color:var(--red);}
+  .mini-count.amber{background:var(--amber-bg); color:var(--amber);}
+  .mini-count.green{background:var(--green-bg); color:var(--green);}
+  .mini-count.zero{opacity:0.35;}
+  .chevron{color:var(--text-faint); transition:transform 0.15s ease; font-size:12px;}
+  .category[data-open="true"] .chevron{transform:rotate(90deg);}
+  .category-body{display:none; padding:0 12px 12px;}
+  .category[data-open="true"] .category-body{display:block;}
+
+  .anomaly-card{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:11px 12px; margin-bottom:8px; cursor:pointer;
+  }
+  .anomaly-card:active{background:#2c333d;}
+  .card-top{display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:5px;}
+  .identifiant{font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:13.5px; color:var(--text);}
+  .priority-chip{font-size:10.5px; padding:2px 8px; border-radius:999px; text-transform:uppercase; letter-spacing:0.03em; white-space:nowrap;}
+  .priority-chip.p-faible{background:transparent; border:1px solid var(--line); color:var(--text-dim);}
+  .priority-chip.p-moyenne{background:var(--accent-dim); color:var(--accent);}
+  .priority-chip.p-elevee{background:var(--violet-bg); color:var(--violet);}
+  .card-meta{font-size:12px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace; margin-bottom:6px;}
+  .card-desc{font-size:13.5px; color:var(--text); margin-bottom:8px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+  .card-bottom{display:flex; justify-content:space-between; align-items:center; gap:8px;}
+  .status-pill{display:flex; align-items:center; gap:5px; font-size:12px;}
+  .status-pill .dot{width:8px; height:8px; border-radius:50%;}
+  .status-pill.non-traite .dot{background:var(--red);}
+  .status-pill.en-cours .dot{background:var(--amber);}
+  .status-pill.traite .dot{background:var(--green);}
+  .card-by{font-size:11px; color:var(--text-faint);}
+
+  .add-anomaly-btn{
+    width:100%; background:transparent; border:1px dashed var(--line); color:var(--accent);
+    border-radius:10px; padding:10px; font-size:13.5px; cursor:pointer; margin-top:2px;
+  }
+  .add-anomaly-btn:active{background:var(--panel-2);}
+
+  .empty-state{padding:36px 16px; text-align:center; color:var(--text-dim);}
+  .empty-state .big{font-size:32px; margin-bottom:6px;}
+
+  /* ---------- FAB ---------- */
+  .fab{
+    position:fixed; bottom:22px; right:calc(50% - 320px + 22px);
+    width:56px; height:56px; border-radius:50%; background:var(--accent); color:#0d1116;
+    border:none; font-size:28px; box-shadow:var(--shadow); cursor:pointer; z-index:30;
+    display:flex; align-items:center; justify-content:center; line-height:1;
+  }
+  @media (max-width:684px){ .fab{ right:22px; } }
+  .fab:active{transform:scale(0.94);}
+
+  /* ---------- Modal / sheet ---------- */
+  .overlay{
+    position:fixed; inset:0; background:rgba(8,10,13,0.6); z-index:50;
+    display:flex; align-items:flex-end; justify-content:center;
+  }
+  .sheet{
+    background:var(--bg-alt); width:100%; max-width:640px; max-height:92vh; overflow-y:auto;
+    border-radius:18px 18px 0 0; border:1px solid var(--line); border-bottom:none;
+    padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+  }
+  .sheet-handle{width:36px; height:4px; background:var(--line); border-radius:2px; margin:0 auto 14px;}
+  .sheet h2{font-size:17px; margin-bottom:2px;}
+  .sheet .sheet-sub{font-size:12.5px; color:var(--text-dim); margin-bottom:16px; font-family:'IBM Plex Mono',monospace;}
+  .field{margin-bottom:13px;}
+  .field label{display:block; font-size:12.5px; color:var(--text-dim); margin-bottom:5px; text-transform:uppercase; letter-spacing:0.02em;}
+  .field input, .field select, .field textarea{
+    width:100%; background:var(--panel); border:1px solid var(--line); border-radius:9px;
+    color:var(--text); padding:10px 11px;
+  }
+  .field textarea{resize:vertical; min-height:64px;}
+  .field-row{display:flex; gap:10px;}
+  .field-row .field{flex:1;}
+  .section-divider{border:none; border-top:1px solid var(--line); margin:16px 0 14px;}
+  .section-divider-label{font-size:11.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.05em; margin:-10px 0 12px;}
+  .sheet-actions{display:flex; gap:10px; margin-top:6px;}
+  .btn{flex:1; padding:12px; border-radius:10px; border:1px solid var(--line); background:var(--panel); color:var(--text); font-size:14.5px; font-weight:600; cursor:pointer;}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:#0d1116;}
+  .btn.danger{background:transparent; border-color:var(--red); color:var(--red); flex:0 0 auto; padding:12px 16px;}
+  .btn:active{opacity:0.85;}
+
+  .picker-list{display:flex; flex-direction:column; gap:8px;}
+  .picker-item{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--line);
+    border-radius:10px; padding:12px 14px; cursor:pointer; font-family:'Oswald',sans-serif;
+    text-transform:uppercase; font-size:14px; letter-spacing:0.02em;
+  }
+  .picker-item:active{background:var(--panel-2);}
+  .picker-item span.pcode{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-faint); text-transform:none;}
+
+  .menu-list{display:flex; flex-direction:column; gap:6px;}
+  .menu-item{
+    background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:13px 14px;
+    text-align:left; color:var(--text); font-size:14.5px; cursor:pointer;
+  }
+  .menu-item:active{background:var(--panel-2);}
+
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    padding:11px 18px; border-radius:999px; font-size:13.5px; box-shadow:var(--shadow); z-index:80;
+  }
+
+  .photo-actions{display:flex; gap:8px; margin-bottom:10px;}
+  .photo-actions .btn{padding:10px 8px; font-size:13px; flex:1;}
+  .photo-preview{position:relative; margin-bottom:10px;}
+  .photo-preview img{width:100%; max-height:220px; object-fit:cover; border-radius:10px; border:1px solid var(--line); display:block; cursor:zoom-in;}
+  .photo-preview .remove-photo{
+    position:absolute; top:8px; right:8px; width:30px; height:30px; border-radius:50%;
+    background:rgba(15,17,20,0.75); color:#fff; border:none; font-size:15px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .photo-placeholder{
+    border:1px dashed var(--line); border-radius:10px; padding:16px; text-align:center;
+    color:var(--text-faint); font-size:12.5px; margin-bottom:10px;
+  }
+  .lightbox{position:fixed; inset:0; background:rgba(6,8,10,0.92); z-index:90; display:flex; align-items:center; justify-content:center; padding:20px;}
+  .lightbox img{max-width:100%; max-height:100%; border-radius:8px;}
+
+  .loading-screen{display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:70vh; color:var(--text-dim); gap:10px;}
+  .spinner{width:22px; height:22px; border-radius:50%; border:2px solid var(--line); border-top-color:var(--accent); animation:spin 0.8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark"><span></span><span></span><span></span></div>
+      <div>
+        <h1>Suivi Anomalies</h1>
+        <p class="brand-sub">RÉSEAU TERRAIN</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" id="refreshBtn" title="Actualiser">⟳</button>
+      <button class="icon-btn" id="menuBtn" title="Menu">⋮</button>
+    </div>
+  </div>
+  <div class="sync-row">
+    <span class="sync-dot live" id="syncDot"></span>
+    <span id="syncLabel">Synchronisation…</span>
+  </div>
+
+  <div class="stats-bar" id="statsBar"></div>
+
+  <div class="controls">
+    <div class="chips" id="filterChips"></div>
+    <div class="search-wrap">
+      <input id="searchInput" type="search" placeholder="Rechercher : équipement, PK, description…">
+    </div>
+  </div>
+
+  <main class="rail" id="categoryList">
+    <div class="loading-screen"><div class="spinner"></div><span>Chargement des données partagées…</span></div>
+  </main>
+
+  <button class="fab" id="fab" title="Ajouter une anomalie">+</button>
+  <div id="modalRoot"></div>
+  <div class="toast" id="toast" hidden></div>
+</div>
+
+<script type="module">
+// ==================================================================
+// CONFIGURATION FIREBASE — remplacez les valeurs ci-dessous par
+// celles de VOTRE projet Firebase (Paramètres du projet > Vos applications).
+// Voir le guide de déploiement fourni pour la marche à suivre complète.
+// ==================================================================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
+import {
+  getFirestore, collection, doc, setDoc, deleteDoc, getDoc, onSnapshot
+} from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCPPl7FjwIdTGGeLExr7PKGpDPYR8kX7NI",
+  authDomain: "suivi-anomalies-terrain-83472.firebaseapp.com",
+  projectId: "suivi-anomalies-terrain-83472",
+  storageBucket: "suivi-anomalies-terrain-83472.firebasestorage.app",
+  messagingSenderId: "780463181895",
+  appId: "1:780463181895:web:82c75726c71666f2006162"
+};
+const fbApp = initializeApp(firebaseConfig);
+const db = getFirestore(fbApp);
+const ANOMALIES_COL = 'anomalies';
+const PHOTOS_COL = 'photos';
+
+(function(){
+  "use strict";
+
+  const CATEGORIES = [
+    {id:'percage-insert', label:'Perçage / Insert', prefix:'PI'},
+    {id:'aiguille',       label:'Aiguille',         prefix:'AIG'},
+    {id:'crocodile',      label:'Crocodile',        prefix:'CRO'},
+    {id:'kvb',            label:'KVB',              prefix:'KVB'},
+    {id:'pedales',        label:'Pédales',          prefix:'PED'},
+    {id:'cdv',            label:'CDV',              prefix:'CDV'},
+    {id:'signaux',        label:'Signaux',          prefix:'SIG'},
+    {id:'centre',         label:'Centre',           prefix:'CEN'},
+    {id:'parafoudre',     label:'Parafoudre',       prefix:'PARA'},
+    {id:'rechauffage',    label:'Réchauffage',      prefix:'REC'},
+  ];
+  const VOIES = ['1L','2L','1D','2D','VM Gouss','V4 Gouss','VM Orry-Chantilly'];
+  const STATUTS = ['Non traité','En cours','Traité'];
+  const PRIORITES = ['Faible','Moyenne','Élevée'];
+  const FILTER_MAP = {'non-traite':'Non traité','en-cours':'En cours','traite':'Traité'};
+
+  let anomalies = [];
+  let profile = {name:''};
+  let expanded = new Set();
+  let activeFilter = 'all';
+  let searchTerm = '';
+  let modalOpen = false;
+
+  const $ = (sel, root) => (root||document).querySelector(sel);
+  const el = (tag, cls) => { const e=document.createElement(tag); if(cls) e.className=cls; return e; };
+
+  function escapeHtml(str){
+    return String(str==null?'':str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+  function fmtDate(iso){
+    if(!iso) return '—';
+    const parts = iso.split('-');
+    if(parts.length!==3) return iso;
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  function nowLabel(){
+    const d = new Date();
+    return d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  }
+  function statusClass(s){
+    if(s==='Non traité') return 'non-traite';
+    if(s==='En cours') return 'en-cours';
+    return 'traite';
+  }
+  function priorityClass(p){
+    if(p==='Faible') return 'p-faible';
+    if(p==='Élevée') return 'p-elevee';
+    return 'p-moyenne';
+  }
+
+  // ---------------- Storage (Firestore = partagé, localStorage = profil perso) ----------------
+  function loadProfile(){
+    try{
+      const raw = localStorage.getItem('anomalies_profile');
+      if(raw) profile = JSON.parse(raw);
+    }catch(e){ profile = {name:''}; }
+  }
+  function saveProfile(name){
+    profile = {name: name.trim()};
+    try{ localStorage.setItem('anomalies_profile', JSON.stringify(profile)); }catch(e){ /* ignore */ }
+  }
+
+  async function saveAnomalyDoc(item){
+    try{ await setDoc(doc(db, ANOMALIES_COL, item.id), item); return true; }
+    catch(e){ console.error(e); return false; }
+  }
+  async function deleteAnomalyDoc(id){
+    try{ await deleteDoc(doc(db, ANOMALIES_COL, id)); }catch(e){ console.error(e); }
+  }
+  async function savePhotoDoc(id, dataUrl){
+    try{ await setDoc(doc(db, PHOTOS_COL, id), {data: dataUrl}); return true; }
+    catch(e){ console.error(e); return false; }
+  }
+  async function deletePhotoDoc(id){
+    try{ await deleteDoc(doc(db, PHOTOS_COL, id)); }catch(e){ /* ignore */ }
+  }
+  async function getPhotoDoc(id){
+    try{
+      const snap = await getDoc(doc(db, PHOTOS_COL, id));
+      return snap.exists() ? (snap.data().data || null) : null;
+    }catch(e){ return null; }
+  }
+
+  function nextIdentifiant(catId){
+    const cat = CATEGORIES.find(c=>c.id===catId);
+    let max = 0;
+    anomalies.forEach(a=>{
+      if(a.category===catId){
+        const m = /-(\d+)$/.exec(a.identifiant||'');
+        if(m){ const n = parseInt(m[1],10); if(n>max) max=n; }
+      }
+    });
+    return `${cat.prefix}-${String(max+1).padStart(3,'0')}`;
+  }
+
+  // ---------------- Rendering ----------------
+  function computeCatStats(catId){
+    const items = anomalies.filter(a=>a.category===catId);
+    const c = {'Non traité':0,'En cours':0,'Traité':0};
+    items.forEach(a=>{ if(c[a.statut]!==undefined) c[a.statut]++; });
+    return {total:items.length, ...c};
+  }
+  function worstColor(stats){
+    if(stats['Non traité']>0) return 'red';
+    if(stats['En cours']>0) return 'amber';
+    if(stats['Traité']>0) return 'green';
+    return '';
+  }
+
+  function matchesFilters(a){
+    if(activeFilter!=='all' && a.statut!==FILTER_MAP[activeFilter]) return false;
+    if(searchTerm){
+      const q = searchTerm.toLowerCase();
+      const hay = [a.identifiant,a.voie,a.pk,a.equipement,a.description,a.commentaire,a.traitePar].join(' ').toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  }
+
+  function renderStats(){
+    const bar = $('#statsBar');
+    const c = {'Non traité':0,'En cours':0,'Traité':0};
+    anomalies.forEach(a=>{ if(c[a.statut]!==undefined) c[a.statut]++; });
+    bar.innerHTML = `
+      <div class="stat-pill red"><span class="num">${c['Non traité']}</span><span class="lbl">Non traité</span></div>
+      <div class="stat-pill amber"><span class="num">${c['En cours']}</span><span class="lbl">En cours</span></div>
+      <div class="stat-pill green"><span class="num">${c['Traité']}</span><span class="lbl">Traité</span></div>
+    `;
+  }
+
+  function renderChips(){
+    const wrap = $('#filterChips');
+    const defs = [['all','Toutes'],['non-traite','Non traité'],['en-cours','En cours'],['traite','Traité']];
+    wrap.innerHTML = defs.map(([k,label])=>
+      `<button class="chip" data-filter="${k}" data-active="${activeFilter===k}">${label}</button>`
+    ).join('');
+  }
+
+  function renderCategories(){
+    const root = $('#categoryList');
+    const filterActive = activeFilter!=='all' || searchTerm.trim()!=='';
+    let html = '';
+    let anyVisible = false;
+
+    CATEGORIES.forEach(cat=>{
+      const all = anomalies.filter(a=>a.category===cat.id);
+      const visibleItems = all.filter(matchesFilters);
+      if(filterActive && visibleItems.length===0) return;
+      anyVisible = true;
+      const stats = computeCatStats(cat.id);
+      const worst = worstColor(stats);
+      const isOpen = filterActive ? true : expanded.has(cat.id);
+
+      let cardsHtml = '';
+      if(isOpen){
+        if(visibleItems.length===0){
+          cardsHtml = `<div class="empty-state" style="padding:18px 4px;"><div>Aucune anomalie ${filterActive?'ne correspond au filtre':'enregistrée'} pour l'instant.</div></div>`;
+        }else{
+          cardsHtml = visibleItems.slice().sort((a,b)=> (b.updatedAt||'').localeCompare(a.updatedAt||'')).map(a=>`
+            <div class="anomaly-card" data-cat="${cat.id}" data-id="${a.id}">
+              <div class="card-top">
+                <span class="identifiant">${escapeHtml(a.identifiant)}${a.hasPhoto ? ' 📷' : ''}</span>
+                <span class="priority-chip ${priorityClass(a.priorite)}">${escapeHtml(a.priorite)}</span>
+              </div>
+              <div class="card-meta">${escapeHtml(a.voie||'—')} · PK ${escapeHtml(a.pk||'—')} · ${escapeHtml(a.equipement||'—')}</div>
+              <div class="card-desc">${escapeHtml(a.description||'')}</div>
+              <div class="card-bottom">
+                <span class="status-pill ${statusClass(a.statut)}"><span class="dot"></span>${escapeHtml(a.statut)}</span>
+                <span class="card-by">${a.updatedBy ? 'Modifié par '+escapeHtml(a.updatedBy) : ''}</span>
+              </div>
+            </div>
+          `).join('');
+        }
+        cardsHtml += `<button class="add-anomaly-btn" data-cat="${cat.id}">+ Ajouter une anomalie · ${escapeHtml(cat.label)}</button>`;
+      }
+
+      html += `
+        <div class="category" data-cat="${cat.id}" data-open="${isOpen}" data-worst="${worst}">
+          <div class="category-header" data-cat="${cat.id}">
+            <span class="cat-label">${escapeHtml(cat.label)}</span>
+            <div class="cat-counts">
+              <span class="mini-count red ${stats['Non traité']===0?'zero':''}">${stats['Non traité']}</span>
+              <span class="mini-count amber ${stats['En cours']===0?'zero':''}">${stats['En cours']}</span>
+              <span class="mini-count green ${stats['Traité']===0?'zero':''}">${stats['Traité']}</span>
+            </div>
+            <span class="chevron">▶</span>
+          </div>
+          <div class="category-body">${cardsHtml}</div>
+        </div>
+      `;
+    });
+
+    if(!anyVisible){
+      html = `<div class="empty-state"><div class="big">🔍</div><div>Aucune anomalie ne correspond à votre recherche.</div></div>`;
+    }
+    root.innerHTML = html;
+  }
+
+  function render(){
+    renderStats();
+    renderChips();
+    renderCategories();
+  }
+
+  // ---------------- Modals ----------------
+  function closeModal(){
+    modalOpen = false;
+    $('#modalRoot').innerHTML = '';
+  }
+
+  function openCategoryPicker(){
+    modalOpen = true;
+    $('#modalRoot').innerHTML = `
+      <div class="overlay" id="overlayEl">
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <h2>Nouvelle anomalie</h2>
+          <p class="sheet-sub">Choisir une catégorie d'équipement</p>
+          <div class="picker-list">
+            ${CATEGORIES.map(c=>`<div class="picker-item" data-cat="${c.id}">${escapeHtml(c.label)} <span class="pcode">${c.prefix}</span></div>`).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+    $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') closeModal(); });
+    $('#modalRoot').querySelectorAll('.picker-item').forEach(item=>{
+      item.addEventListener('click', ()=> openForm(item.dataset.cat));
+    });
+  }
+
+  function openMenu(){
+    modalOpen = true;
+    $('#modalRoot').innerHTML = `
+      <div class="overlay" id="overlayEl">
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <h2>Menu</h2>
+          <p class="sheet-sub">${profile.name ? 'Connecté en tant que '+escapeHtml(profile.name) : 'Aucun nom enregistré'}</p>
+          <div class="menu-list">
+            <button class="menu-item" id="menuProfile">✎ Modifier mon nom</button>
+            <button class="menu-item" id="menuExport">⇩ Exporter en CSV</button>
+          </div>
+        </div>
+      </div>
+    `;
+    $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') closeModal(); });
+    $('#menuProfile').addEventListener('click', ()=>{ closeModal(); openProfileModal(); });
+    $('#menuExport').addEventListener('click', ()=>{ closeModal(); exportCSV(); });
+  }
+
+  function openProfileModal(){
+    modalOpen = true;
+    $('#modalRoot').innerHTML = `
+      <div class="overlay" id="overlayEl">
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <h2>Votre nom</h2>
+          <p class="sheet-sub">Utilisé pour identifier vos ajouts et traitements</p>
+          <div class="field">
+            <label for="nameInput">Nom / prénom</label>
+            <input id="nameInput" type="text" value="${escapeHtml(profile.name)}" placeholder="ex : J. Martin" maxlength="60">
+          </div>
+          <div class="sheet-actions">
+            <button class="btn" id="cancelName">Annuler</button>
+            <button class="btn primary" id="saveName">Enregistrer</button>
+          </div>
+        </div>
+      </div>
+    `;
+    $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') closeModal(); });
+    $('#cancelName').addEventListener('click', closeModal);
+    $('#saveName').addEventListener('click', async ()=>{
+      const v = $('#nameInput').value;
+      await saveProfile(v);
+      closeModal();
+      showToast('Nom enregistré');
+    });
+  }
+
+  function openForm(catId, anomalyId){
+    const cat = CATEGORIES.find(c=>c.id===catId);
+    const editing = !!anomalyId;
+    const existing = editing ? anomalies.find(a=>a.id===anomalyId) : null;
+    modalOpen = true;
+
+    const today = new Date().toISOString().slice(0,10);
+    const v = existing || {
+      dateConstat: today, voie:'', pk:'', equipement:'', description:'',
+      priorite:'Moyenne', statut:'Non traité', dateTraitement:'', traitePar: profile.name||'', commentaire:''
+    };
+
+    $('#modalRoot').innerHTML = `
+      <div class="overlay" id="overlayEl">
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <h2>${editing ? escapeHtml(existing.identifiant) : 'Nouvelle anomalie'}</h2>
+          <p class="sheet-sub">${escapeHtml(cat.label)}</p>
+          <form id="anomalyForm">
+            <div class="field-row">
+              <div class="field">
+                <label for="f_voie">Voie *</label>
+                <input id="f_voie" list="voiesList" required value="${escapeHtml(v.voie)}" placeholder="ex : 2L">
+                <datalist id="voiesList">${VOIES.map(x=>`<option value="${escapeHtml(x)}">`).join('')}</datalist>
+              </div>
+              <div class="field">
+                <label for="f_pk">PK</label>
+                <input id="f_pk" type="text" value="${escapeHtml(v.pk)}" placeholder="ex : 12+300">
+              </div>
+            </div>
+            <div class="field">
+              <label for="f_equip">Équipement / repère *</label>
+              <input id="f_equip" type="text" required value="${escapeHtml(v.equipement)}" placeholder="ex : Aiguille 14">
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="f_date">Date de constat *</label>
+                <input id="f_date" type="date" required value="${escapeHtml(v.dateConstat)}">
+              </div>
+              <div class="field">
+                <label for="f_prio">Priorité</label>
+                <select id="f_prio">${PRIORITES.map(p=>`<option ${p===v.priorite?'selected':''}>${p}</option>`).join('')}</select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="f_desc">Description de l'anomalie *</label>
+              <textarea id="f_desc" required placeholder="Décrivez ce qui a été constaté sur le terrain">${escapeHtml(v.description)}</textarea>
+            </div>
+            <div class="field">
+              <label>Photo</label>
+              <div id="photoZone"><div class="photo-placeholder">Aucune photo</div></div>
+              <div class="photo-actions">
+                <button type="button" class="btn" id="takePhotoBtn">📷 Prendre une photo</button>
+                <button type="button" class="btn" id="pickPhotoBtn">🖼️ Galerie</button>
+              </div>
+              <input type="file" accept="image/*" capture="environment" id="cameraInput" style="display:none">
+              <input type="file" accept="image/*" id="galleryInput" style="display:none">
+            </div>
+
+            <hr class="section-divider">
+            <div class="section-divider-label">Traitement</div>
+
+            <div class="field-row">
+              <div class="field">
+                <label for="f_statut">Statut</label>
+                <select id="f_statut">${STATUTS.map(s=>`<option ${s===v.statut?'selected':''}>${s}</option>`).join('')}</select>
+              </div>
+              <div class="field">
+                <label for="f_datetr">Date de traitement</label>
+                <input id="f_datetr" type="date" value="${escapeHtml(v.dateTraitement)}">
+              </div>
+            </div>
+            <div class="field">
+              <label for="f_par">Traité par</label>
+              <input id="f_par" type="text" value="${escapeHtml(v.traitePar)}" placeholder="votre nom">
+            </div>
+            <div class="field">
+              <label for="f_comment">Commentaire / action réalisée</label>
+              <textarea id="f_comment" placeholder="Actions menées, pièces changées…">${escapeHtml(v.commentaire)}</textarea>
+            </div>
+
+            <div class="sheet-actions">
+              ${editing ? `<button type="button" class="btn danger" id="deleteBtn">Supprimer</button>` : ''}
+              <button type="button" class="btn" id="cancelForm">Annuler</button>
+              <button type="submit" class="btn primary">Enregistrer</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+
+    $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') closeModal(); });
+    $('#cancelForm').addEventListener('click', closeModal);
+    if(editing){
+      $('#deleteBtn').addEventListener('click', async ()=>{
+        if(!confirm(`Supprimer l'anomalie ${existing.identifiant} ? Cette action est irréversible.`)) return;
+        await deleteAnomalyDoc(existing.id);
+        if(existing.hasPhoto) await deletePhotoDoc(existing.id);
+        closeModal();
+        showToast('Anomalie supprimée');
+      });
+    }
+
+    // ---- Photo capture wiring ----
+    let pendingPhoto = null;   // newly captured/picked dataURL, not yet saved
+    let removePhoto = false;   // user asked to remove existing photo
+
+    function renderPhotoZone(dataUrl, loading){
+      const zone = $('#photoZone');
+      if(loading){
+        zone.innerHTML = `<div class="photo-placeholder">Chargement de la photo…</div>`;
+        return;
+      }
+      if(dataUrl){
+        zone.innerHTML = `<div class="photo-preview"><img id="photoImg" src="${dataUrl}" alt="Photo de l'anomalie"><button type="button" class="remove-photo" id="removePhotoBtn">✕</button></div>`;
+        $('#photoImg').addEventListener('click', ()=> openLightbox(dataUrl));
+        $('#removePhotoBtn').addEventListener('click', ()=>{
+          pendingPhoto = null;
+          removePhoto = true;
+          renderPhotoZone(null, false);
+        });
+      }else{
+        zone.innerHTML = `<div class="photo-placeholder">Aucune photo</div>`;
+      }
+    }
+
+    async function handleFile(file){
+      if(!file) return;
+      renderPhotoZone(null, true);
+      try{
+        let dataUrl = await compressImageFile(file, 1100, 0.7);
+        if(dataUrl.length > 700000) dataUrl = await compressImageFile(file, 1100, 0.45);
+        if(dataUrl.length > 700000) dataUrl = await compressImageFile(file, 850, 0.4);
+        if(dataUrl.length > 900000){
+          showToast("Photo trop volumineuse même compressée — réessayez avec une autre photo");
+          renderPhotoZone(null, false);
+          return;
+        }
+        pendingPhoto = dataUrl;
+        removePhoto = false;
+        renderPhotoZone(dataUrl, false);
+      }catch(err){
+        renderPhotoZone(null, false);
+        showToast("Impossible de traiter cette photo");
+      }
+    }
+    $('#takePhotoBtn').addEventListener('click', ()=> $('#cameraInput').click());
+    $('#pickPhotoBtn').addEventListener('click', ()=> $('#galleryInput').click());
+    $('#cameraInput').addEventListener('change', e=> handleFile(e.target.files[0]));
+    $('#galleryInput').addEventListener('change', e=> handleFile(e.target.files[0]));
+
+    if(editing && existing.hasPhoto){
+      renderPhotoZone(null, true);
+      getPhotoDoc(existing.id).then(dataUrl=>{
+        if(dataUrl && !pendingPhoto && !removePhoto) renderPhotoZone(dataUrl, false);
+      });
+    }
+    $('#anomalyForm').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const itemId = editing ? existing.id : uid();
+      const nowIso = new Date().toISOString();
+
+      // Enregistre d'abord la photo, pour que hasPhoto reflète le résultat réel
+      let hasPhoto = editing ? !!existing.hasPhoto : false;
+      if(pendingPhoto){
+        const ok = await savePhotoDoc(itemId, pendingPhoto);
+        hasPhoto = ok;
+        if(!ok) showToast("La photo n'a pas pu être envoyée (trop lourde ?)");
+      }else if(removePhoto && hasPhoto){
+        await deletePhotoDoc(itemId);
+        hasPhoto = false;
+      }
+
+      const payload = {
+        voie: $('#f_voie').value.trim(),
+        pk: $('#f_pk').value.trim(),
+        equipement: $('#f_equip').value.trim(),
+        dateConstat: $('#f_date').value,
+        priorite: $('#f_prio').value,
+        description: $('#f_desc').value.trim(),
+        hasPhoto: hasPhoto,
+        statut: $('#f_statut').value,
+        dateTraitement: $('#f_datetr').value,
+        traitePar: $('#f_par').value.trim(),
+        commentaire: $('#f_comment').value.trim(),
+        updatedAt: nowIso,
+        updatedBy: profile.name || 'Anonyme',
+      };
+      let finalItem;
+      if(editing){
+        finalItem = {...existing, ...payload, id: itemId};
+      }else{
+        finalItem = {
+          id: itemId,
+          category: catId,
+          identifiant: nextIdentifiant(catId),
+          createdAt: nowIso,
+          createdBy: profile.name || 'Anonyme',
+          ...payload
+        };
+      }
+      const ok = await saveAnomalyDoc(finalItem);
+      expanded.add(catId);
+      closeModal();
+      showToast(ok ? 'Anomalie enregistrée' : "Échec de l'enregistrement — réessayez");
+    });
+  }
+
+  function openLightbox(dataUrl){
+    const box = el('div','lightbox');
+    box.innerHTML = `<img src="${dataUrl}" alt="Photo agrandie">`;
+    box.addEventListener('click', ()=> box.remove());
+    document.body.appendChild(box);
+  }
+
+  async function compressImageFile(file, maxDim, quality){
+    let source, w, h;
+    if('createImageBitmap' in window){
+      let bitmap;
+      try{ bitmap = await createImageBitmap(file, {imageOrientation:'from-image'}); }
+      catch(e){ bitmap = await createImageBitmap(file); }
+      source = bitmap; w = bitmap.width; h = bitmap.height;
+    }else{
+      const img = await loadImageFromFile(file);
+      source = img; w = img.naturalWidth; h = img.naturalHeight;
+    }
+    if(w > h && w > maxDim){ h = Math.round(h * maxDim / w); w = maxDim; }
+    else if(h >= w && h > maxDim){ w = Math.round(w * maxDim / h); h = maxDim; }
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(source, 0, 0, w, h);
+    return canvas.toDataURL('image/jpeg', quality);
+  }
+  function loadImageFromFile(file){
+    return new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onload = e=>{
+        const img = new Image();
+        img.onload = ()=> resolve(img);
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function showToast(msg){
+    const t = $('#toast');
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(()=>{ t.hidden = true; }, 2600);
+  }
+
+  function exportCSV(){
+    const headers = ['Catégorie','Identifiant','Date de constat','Voie','PK','Équipement','Description','Photo jointe','Priorité','Statut','Date de traitement','Traité par','Commentaire'];
+    const rows = anomalies.map(a=>{
+      const catLabel = (CATEGORIES.find(c=>c.id===a.category)||{}).label || a.category;
+      return [catLabel,a.identifiant,fmtDate(a.dateConstat),a.voie,a.pk,a.equipement,a.description,(a.hasPhoto?'Oui':'Non'),a.priorite,a.statut,fmtDate(a.dateTraitement),a.traitePar,a.commentaire]
+        .map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`).join(',');
+    });
+    const csv = [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `anomalies_terrain_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Export CSV téléchargé');
+  }
+
+  // ---------------- Sync (temps réel via Firestore) ----------------
+  function startRealtimeSync(){
+    onSnapshot(collection(db, ANOMALIES_COL), (snapshot)=>{
+      anomalies = snapshot.docs.map(d=> ({ id: d.id, ...d.data() }));
+      if(!modalOpen) render();
+      $('#syncLabel').textContent = 'Synchronisé à ' + nowLabel();
+    }, (error)=>{
+      console.error(error);
+      $('#syncLabel').textContent = 'Erreur de connexion à la base de données';
+    });
+  }
+
+  // ---------------- Event wiring ----------------
+  function wireStaticEvents(){
+    $('#fab').addEventListener('click', openCategoryPicker);
+    $('#menuBtn').addEventListener('click', openMenu);
+    $('#refreshBtn').addEventListener('click', ()=>{
+      render();
+      $('#syncLabel').textContent = 'Synchronisé à ' + nowLabel();
+      showToast('Déjà synchronisé en temps réel ✓');
+    });
+    $('#filterChips').addEventListener('click', e=>{
+      const chip = e.target.closest('.chip');
+      if(!chip) return;
+      activeFilter = chip.dataset.filter;
+      render();
+    });
+    $('#searchInput').addEventListener('input', e=>{
+      searchTerm = e.target.value;
+      render();
+    });
+    $('#categoryList').addEventListener('click', e=>{
+      const addBtn = e.target.closest('.add-anomaly-btn');
+      if(addBtn){ openForm(addBtn.dataset.cat); return; }
+      const card = e.target.closest('.anomaly-card');
+      if(card){ openForm(card.dataset.cat, card.dataset.id); return; }
+      const header = e.target.closest('.category-header');
+      if(header){
+        const id = header.dataset.cat;
+        if(expanded.has(id)) expanded.delete(id); else expanded.add(id);
+        render();
+      }
+    });
+    document.addEventListener('keydown', e=>{
+      if(e.key==='Escape' && modalOpen) closeModal();
+    });
+  }
+
+  function init(){
+    wireStaticEvents();
+    loadProfile();
+    render();
+    startRealtimeSync();
+    if(!profile.name){
+      setTimeout(()=>{ openProfileModal(); }, 400);
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
