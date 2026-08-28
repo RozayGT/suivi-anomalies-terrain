@@ -213,7 +213,14 @@
   }
   .section-divider{border:none; border-top:1px solid var(--line); margin:16px 0 14px;}
   .section-divider-label{font-size:11.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.05em; margin:-10px 0 12px;}
-  .sheet-actions{display:flex; gap:10px; margin-top:6px;}
+  .sheet-actions{
+    display:flex; gap:10px;
+    position:sticky; bottom:calc(-1 * (18px + env(safe-area-inset-bottom)));
+    background:var(--bg-alt);
+    margin:16px -18px calc(-1 * (18px + env(safe-area-inset-bottom)));
+    padding:14px 18px calc(14px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--line);
+  }
   .btn{flex:1; padding:12px; border-radius:10px; border:1px solid var(--line); background:var(--panel); color:var(--text); font-size:14.5px; font-weight:600; cursor:pointer;}
   .btn.primary{background:var(--accent); border-color:var(--accent); color:#0d1116;}
   .btn.danger{background:transparent; border-color:var(--red); color:var(--red); flex:0 0 auto; padding:12px 16px;}
@@ -258,6 +265,19 @@
   .lightbox{position:fixed; inset:0; background:rgba(6,8,10,0.92); z-index:90; display:flex; align-items:center; justify-content:center; padding:20px;}
   .lightbox img{max-width:100%; max-height:100%; border-radius:8px;}
 
+  .confirm-overlay{align-items:center; z-index:100;}
+  .confirm-card{
+    background:var(--bg-alt); border:1px solid var(--line); border-radius:16px;
+    padding:22px 20px; width:calc(100% - 56px); max-width:320px; box-shadow:var(--shadow);
+  }
+  .confirm-message{font-size:14.5px; color:var(--text); margin:0 0 18px; line-height:1.5;}
+  .confirm-actions{display:flex; gap:10px;}
+  .btn.danger-solid{background:var(--red); border-color:var(--red); color:#fff; flex:1;}
+
+  .new-badge{
+    background:var(--accent); color:#0d1116; font-size:9.5px; font-weight:700;
+    padding:2px 6px; border-radius:5px; letter-spacing:0.04em; margin-left:6px; vertical-align:middle;
+  }
   .loading-screen{display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:70vh; color:var(--text-dim); gap:10px;}
   .spinner{width:22px; height:22px; border-radius:50%; border:2px solid var(--line); border-top-color:var(--accent); animation:spin 0.8s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg);}}
@@ -374,6 +394,28 @@ const PHOTOS_COL = 'photos';
   function haptic(ms){
     try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e){ /* ignore */ }
   }
+  function confirmDialog(message, okLabel, okClass){
+    okLabel = okLabel || 'Confirmer';
+    okClass = okClass || 'danger-solid';
+    return new Promise(resolve=>{
+      const wrap = document.createElement('div');
+      wrap.className = 'overlay confirm-overlay';
+      wrap.innerHTML = `
+        <div class="confirm-card">
+          <p class="confirm-message">${escapeHtml(message)}</p>
+          <div class="confirm-actions">
+            <button type="button" class="btn" id="confirmCancelBtn">Annuler</button>
+            <button type="button" class="btn ${okClass}" id="confirmOkBtn">${escapeHtml(okLabel)}</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(wrap);
+      function cleanup(result){ wrap.remove(); resolve(result); }
+      wrap.addEventListener('click', e=>{ if(e.target===wrap) cleanup(false); });
+      wrap.querySelector('#confirmCancelBtn').addEventListener('click', ()=>cleanup(false));
+      wrap.querySelector('#confirmOkBtn').addEventListener('click', ()=>cleanup(true));
+    });
+  }
   function fmtDate(iso){
     if(!iso) return '—';
     const parts = iso.split('-');
@@ -461,6 +503,18 @@ const PHOTOS_COL = 'photos';
     return `${cat.prefix}-${String(max+1).padStart(3,'0')}`;
   }
 
+  function findPotentialDuplicate(catId, voie, equipement){
+    const v = (voie||'').trim().toLowerCase();
+    const e = (equipement||'').trim().toLowerCase();
+    if(!v || !e) return null;
+    return anomalies.find(a=>
+      a.category===catId &&
+      a.statut!=='Traité' &&
+      (a.voie||'').trim().toLowerCase()===v &&
+      (a.equipement||'').trim().toLowerCase()===e
+    ) || null;
+  }
+
   // ---------------- Rendering ----------------
   function computeCatStats(catId){
     const items = anomalies.filter(a=>a.category===catId);
@@ -528,10 +582,12 @@ const PHOTOS_COL = 'photos';
         if(visibleItems.length===0){
           cardsHtml = `<div class="empty-state" style="padding:18px 4px;"><div>Aucune anomalie ${filterActive?'ne correspond au filtre':'enregistrée'} pour l'instant.</div></div>`;
         }else{
-          cardsHtml = visibleItems.slice().sort((a,b)=> (b.updatedAt||'').localeCompare(a.updatedAt||'')).map(a=>`
+          cardsHtml = visibleItems.slice().sort((a,b)=> (b.updatedAt||'').localeCompare(a.updatedAt||'')).map(a=>{
+            const isNew = a.createdAt && (Date.now() - new Date(a.createdAt).getTime()) < 24*60*60*1000;
+            return `
             <div class="anomaly-card" data-cat="${cat.id}" data-id="${a.id}">
               <div class="card-top">
-                <span class="identifiant">${escapeHtml(a.identifiant)}${a.hasPhoto ? ' 📷' : ''}</span>
+                <span class="identifiant">${escapeHtml(a.identifiant)}${a.hasPhoto ? ' 📷' : ''}${isNew ? ' <span class="new-badge">NOUVEAU</span>' : ''}</span>
                 <span class="priority-chip ${priorityClass(a.priorite)}">${escapeHtml(a.priorite)}</span>
               </div>
               <div class="card-meta">${escapeHtml(a.voie||'—')} · PK ${escapeHtml(a.pk||'—')} · ${escapeHtml(a.equipement||'—')}</div>
@@ -541,7 +597,7 @@ const PHOTOS_COL = 'photos';
                 <span class="card-by">${a.updatedBy ? 'Modifié par '+escapeHtml(a.updatedBy) : ''}</span>
               </div>
             </div>
-          `).join('');
+          `;}).join('');
         }
         cardsHtml += `<button class="add-anomaly-btn" data-cat="${cat.id}">+ Ajouter une anomalie · ${escapeHtml(cat.label)}</button>`;
       }
@@ -664,10 +720,8 @@ const PHOTOS_COL = 'photos';
     document.body.style.overflow = 'hidden';
 
     const today = new Date().toISOString().slice(0,10);
-    let lastVoie = '';
-    try{ lastVoie = localStorage.getItem('anomalies_last_voie') || ''; }catch(err){ /* ignore */ }
     const v = existing || {
-      dateConstat: today, voie: lastVoie, pk:'', equipement:'', description:'',
+      dateConstat: today, voie:'', pk:'', equipement:'', description:'',
       priorite:'Moyenne', statut:'Non traité', dateTraitement:'', traitePar: profile.name||'', commentaire:''
     };
 
@@ -760,7 +814,8 @@ const PHOTOS_COL = 'photos';
     });
     if(editing){
       $('#deleteBtn').addEventListener('click', async ()=>{
-        if(!confirm(`Supprimer l'anomalie ${existing.identifiant} ? Cette action est irréversible.`)) return;
+        const ok = await confirmDialog(`Supprimer l'anomalie ${existing.identifiant} ? Cette action est irréversible.`, 'Supprimer', 'danger-solid');
+        if(!ok) return;
         await deleteAnomalyDoc(existing.id);
         if(existing.hasPhoto) await deletePhotoDoc(existing.id);
         haptic(18);
@@ -831,6 +886,21 @@ const PHOTOS_COL = 'photos';
       const submitBtn = $('#submitBtn');
       if(submitBtn){ submitBtn.disabled = true; submitBtn.textContent = 'Enregistrement…'; }
 
+      if(!editing){
+        const dup = findPotentialDuplicate(catId, $('#f_voie').value, $('#f_equip').value);
+        if(dup){
+          const proceed = await confirmDialog(
+            `Une anomalie similaire existe déjà : ${dup.identifiant} (${dup.statut}). Créer quand même ?`,
+            'Créer quand même', 'primary'
+          );
+          if(!proceed){
+            isSubmitting = false;
+            if(submitBtn){ submitBtn.disabled = false; submitBtn.textContent = 'Enregistrer'; }
+            return;
+          }
+        }
+      }
+
       const itemId = editing ? existing.id : uid();
       const nowIso = new Date().toISOString();
 
@@ -874,10 +944,7 @@ const PHOTOS_COL = 'photos';
         };
       }
       const ok = await saveAnomalyDoc(finalItem);
-      if(ok){
-        haptic(18);
-        try{ localStorage.setItem('anomalies_last_voie', payload.voie); }catch(err){ /* ignore */ }
-      }
+      if(ok) haptic(18);
       expanded.add(catId);
       closeModal();
       showToast(ok ? 'Anomalie enregistrée' : "Échec de l'enregistrement — réessayez");
