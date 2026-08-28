@@ -279,8 +279,27 @@
   }
   .photo-thumb.loading{display:flex; align-items:center; justify-content:center; color:var(--text-faint); font-size:9.5px; text-align:center; padding:4px;}
   .photo-hint{color:var(--text-faint); font-size:12px; align-self:center;}
-  .lightbox{position:fixed; inset:0; background:rgba(6,8,10,0.92); z-index:90; display:flex; align-items:center; justify-content:center; padding:20px;}
-  .lightbox img{max-width:100%; max-height:100%; border-radius:8px;}
+  .lightbox{position:fixed; inset:0; background:rgba(6,8,10,0.95); z-index:90; overflow:hidden; touch-action:none;}
+  .lightbox-close{
+    position:absolute; top:calc(14px + env(safe-area-inset-top)); right:14px; z-index:6;
+    width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.14); border:none;
+    color:#fff; font-size:17px; display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .lightbox-track{display:flex; width:100%; height:100%;}
+  .lightbox-slide{
+    flex:0 0 100%; width:100%; height:100%; display:flex; align-items:center; justify-content:center;
+    overflow:hidden; touch-action:none;
+  }
+  .lightbox-slide img{
+    max-width:100%; max-height:100%; touch-action:none; user-select:none; -webkit-user-drag:none;
+    transform-origin:center center; will-change:transform;
+  }
+  .lightbox-dots{
+    position:absolute; bottom:calc(18px + env(safe-area-inset-bottom)); left:0; right:0;
+    display:flex; justify-content:center; gap:6px; z-index:6;
+  }
+  .lightbox-dots .dot{width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.35);}
+  .lightbox-dots .dot.active{background:#fff;}
 
   .confirm-overlay{align-items:center; z-index:100;}
   .confirm-card{
@@ -911,8 +930,9 @@ const PHOTOS_COL = 'photos';
       }
       zone.innerHTML = html;
 
-      zone.querySelectorAll('img').forEach(img=>{
-        img.addEventListener('click', ()=> openLightbox(img.src));
+      const combined = [...existingPhotos.map(p => p.dataUrl), ...pendingNewPhotos];
+      zone.querySelectorAll('.photo-thumb[data-kind] img').forEach((img, i)=>{
+        img.addEventListener('click', ()=> openLightbox(combined, i));
       });
       zone.querySelectorAll('[data-remove-existing]').forEach(btn=>{
         btn.addEventListener('click', ()=>{
@@ -1054,11 +1074,107 @@ const PHOTOS_COL = 'photos';
     });
   }
 
-  function openLightbox(dataUrl){
-    const box = el('div','lightbox');
-    box.innerHTML = `<img src="${dataUrl}" alt="Photo agrandie">`;
-    box.addEventListener('click', ()=> box.remove());
+  function openLightbox(photos, startIndex){
+    if(!photos || !photos.length) return;
+    let index = Math.max(0, Math.min(photos.length - 1, startIndex || 0));
+
+    const box = el('div', 'lightbox');
+    box.innerHTML = `
+      <button type="button" class="lightbox-close" aria-label="Fermer">✕</button>
+      <div class="lightbox-track" id="lbTrack">
+        ${photos.map(src => `<div class="lightbox-slide"><img src="${src}" draggable="false" alt="Photo agrandie"></div>`).join('')}
+      </div>
+      ${photos.length > 1 ? `<div class="lightbox-dots">${photos.map((_, i) => `<span class="dot${i === index ? ' active' : ''}"></span>`).join('')}</div>` : ''}
+    `;
     document.body.appendChild(box);
+
+    const track = box.querySelector('#lbTrack');
+    const slides = Array.from(box.querySelectorAll('.lightbox-slide'));
+    const dots = Array.from(box.querySelectorAll('.dot'));
+    const zoomState = slides.map(() => ({ scale: 1, x: 0, y: 0 }));
+
+    function setIndex(i, animate){
+      index = Math.max(0, Math.min(photos.length - 1, i));
+      track.style.transition = animate === false ? 'none' : 'transform 0.25s ease';
+      track.style.transform = `translateX(-${index * 100}%)`;
+      dots.forEach((d, di) => d.classList.toggle('active', di === index));
+    }
+    setIndex(index, false);
+
+    function applyZoom(i){
+      const img = slides[i].querySelector('img');
+      const z = zoomState[i];
+      img.style.transform = `translate(${z.x}px, ${z.y}px) scale(${z.scale})`;
+    }
+    function toggleZoom(i){
+      const z = zoomState[i];
+      if(z.scale > 1.02){ z.scale = 1; z.x = 0; z.y = 0; }
+      else { z.scale = 2.4; }
+      applyZoom(i);
+    }
+    function dist(t1, t2){ return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY); }
+
+    box.querySelector('.lightbox-close').addEventListener('click', ()=> box.remove());
+
+    let mode = null; // 'swipe' | 'pinch' | 'pan'
+    let startX = 0, startY = 0, startZX = 0, startZY = 0, startDist = 0, startScale = 1;
+    let lastTapTime = 0, lastTapX = 0, lastTapY = 0;
+
+    box.addEventListener('touchstart', (e)=>{
+      if(e.touches.length === 2){
+        mode = 'pinch';
+        startDist = dist(e.touches[0], e.touches[1]);
+        startScale = zoomState[index].scale;
+      }else if(e.touches.length === 1){
+        const t = e.touches[0];
+        const now = Date.now();
+        if(now - lastTapTime < 300 && Math.abs(t.clientX - lastTapX) < 30 && Math.abs(t.clientY - lastTapY) < 30){
+          toggleZoom(index);
+          lastTapTime = 0;
+          mode = null;
+          return;
+        }
+        lastTapTime = now; lastTapX = t.clientX; lastTapY = t.clientY;
+        if(zoomState[index].scale > 1.02){
+          mode = 'pan';
+          startX = t.clientX; startY = t.clientY;
+          startZX = zoomState[index].x; startZY = zoomState[index].y;
+        }else{
+          mode = 'swipe';
+          startX = t.clientX;
+        }
+      }
+    }, {passive:true});
+
+    box.addEventListener('touchmove', (e)=>{
+      if(mode === 'pinch' && e.touches.length === 2){
+        const d = dist(e.touches[0], e.touches[1]);
+        zoomState[index].scale = Math.min(4, Math.max(1, startScale * (d / startDist)));
+        applyZoom(index);
+      }else if(mode === 'pan' && e.touches.length === 1){
+        const t = e.touches[0];
+        zoomState[index].x = startZX + (t.clientX - startX);
+        zoomState[index].y = startZY + (t.clientY - startY);
+        applyZoom(index);
+      }else if(mode === 'swipe' && e.touches.length === 1){
+        const dx = e.touches[0].clientX - startX;
+        track.style.transition = 'none';
+        track.style.transform = `translateX(calc(-${index * 100}% + ${dx}px))`;
+      }
+    }, {passive:true});
+
+    box.addEventListener('touchend', (e)=>{
+      if(mode === 'swipe'){
+        const dx = e.changedTouches[0].clientX - startX;
+        if(dx > 60 && index > 0) setIndex(index - 1);
+        else if(dx < -60 && index < photos.length - 1) setIndex(index + 1);
+        else setIndex(index);
+      }else if(mode === 'pinch' && zoomState[index].scale <= 1.02){
+        zoomState[index] = { scale: 1, x: 0, y: 0 };
+        applyZoom(index);
+      }
+      mode = null;
+    });
   }
 
   async function compressImageFile(file, maxDim, quality){
