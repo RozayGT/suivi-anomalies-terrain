@@ -13,6 +13,17 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Anomalies">
+<script>
+  (function(){
+    try{
+      if(localStorage.getItem('anomalies_theme') === 'light'){
+        document.documentElement.setAttribute('data-theme','light');
+        var m = document.querySelector('meta[name="theme-color"]');
+        if(m) m.setAttribute('content', '#F4F5F7');
+      }
+    }catch(e){}
+  })();
+</script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -39,6 +50,27 @@
     --violet-bg:rgba(167,139,250,0.16);
     --radius:12px;
     --shadow:0 8px 24px rgba(0,0,0,0.35);
+  }
+  [data-theme="light"]{
+    --bg:#F4F5F7;
+    --bg-alt:#FFFFFF;
+    --panel:#FFFFFF;
+    --panel-2:#EDEFF2;
+    --line:#DBDFE5;
+    --text:#1B2129;
+    --text-dim:#5C6673;
+    --text-faint:#848E9C;
+    --accent:#2E6DA4;
+    --accent-dim:#DCE9F5;
+    --red:#C82D33;
+    --red-bg:rgba(200,45,51,0.10);
+    --amber:#9C6300;
+    --amber-bg:rgba(156,99,0,0.12);
+    --green:#188053;
+    --green-bg:rgba(24,128,83,0.10);
+    --violet:#6D48D6;
+    --violet-bg:rgba(109,72,214,0.12);
+    --shadow:0 8px 24px rgba(20,25,35,0.12);
   }
   *,*::before,*::after{box-sizing:border-box;}
   @media (prefers-reduced-motion: reduce){
@@ -301,6 +333,13 @@
   .lightbox-dots .dot{width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.35);}
   .lightbox-dots .dot.active{background:#fff;}
 
+  .tuto-icon{font-size:54px; text-align:center; margin:10px 0 16px; line-height:1;}
+  .tuto-title{text-align:center; margin-bottom:10px;}
+  .tuto-text{font-size:14.5px; line-height:1.6; color:var(--text); text-align:center; margin:0 2px 20px;}
+  .tuto-dots{display:flex; justify-content:center; gap:6px; margin-bottom:6px;}
+  .tuto-dots .dot{width:7px; height:7px; border-radius:50%; background:var(--line);}
+  .tuto-dots .dot.active{background:var(--accent);}
+
   .confirm-overlay{align-items:center; z-index:100;}
   .confirm-card{
     background:var(--bg-alt); border:1px solid var(--line); border-radius:16px;
@@ -507,6 +546,24 @@ const PHOTOS_COL = 'photos';
   function saveProfile(name){
     profile = {name: name.trim()};
     try{ localStorage.setItem('anomalies_profile', JSON.stringify(profile)); }catch(e){ /* ignore */ }
+  }
+
+  function getTheme(){
+    try{ return localStorage.getItem('anomalies_theme') === 'light' ? 'light' : 'dark'; }catch(e){ return 'dark'; }
+  }
+  function setTheme(theme){
+    const t = theme === 'light' ? 'light' : 'dark';
+    if(t === 'light') document.documentElement.setAttribute('data-theme','light');
+    else document.documentElement.removeAttribute('data-theme');
+    try{ localStorage.setItem('anomalies_theme', t); }catch(e){ /* ignore */ }
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if(metaTheme) metaTheme.setAttribute('content', t === 'light' ? '#F4F5F7' : '#161a20');
+  }
+  function hasSeenTutorial(){
+    try{ return localStorage.getItem('anomalies_tutorial_seen') === 'true'; }catch(e){ return false; }
+  }
+  function markTutorialSeen(){
+    try{ localStorage.setItem('anomalies_tutorial_seen', 'true'); }catch(e){ /* ignore */ }
   }
 
   async function saveAnomalyDoc(item){
@@ -733,6 +790,7 @@ const PHOTOS_COL = 'photos';
   function openMenu(){
     modalOpen = true;
     lockBodyScroll();
+    const themeLabel = getTheme() === 'light' ? '🌙 Passer en mode sombre' : '☀️ Passer en mode clair';
     $('#modalRoot').innerHTML = `
       <div class="overlay" id="overlayEl">
         <div class="sheet">
@@ -743,6 +801,8 @@ const PHOTOS_COL = 'photos';
             <p class="sheet-sub">${profile.name ? 'Connecté en tant que '+escapeHtml(profile.name) : 'Aucun nom enregistré'}</p>
             <div class="menu-list">
               <button class="menu-item" id="menuProfile">✎ Modifier mon nom</button>
+              <button class="menu-item" id="menuTheme">${themeLabel}</button>
+              <button class="menu-item" id="menuTutorial">❓ Revoir le tutoriel</button>
               <button class="menu-item" id="menuExport">⇩ Exporter en CSV</button>
             </div>
           </div>
@@ -751,7 +811,105 @@ const PHOTOS_COL = 'photos';
     `;
     $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') closeModal(); });
     $('#menuProfile').addEventListener('click', ()=>{ closeModal(); openProfileModal(); });
+    $('#menuTheme').addEventListener('click', ()=>{
+      setTheme(getTheme() === 'light' ? 'dark' : 'light');
+      closeModal();
+    });
+    $('#menuTutorial').addEventListener('click', ()=>{ closeModal(); openTutorial(false); });
     $('#menuExport').addEventListener('click', ()=>{ closeModal(); exportCSV(); });
+  }
+
+  const TUTORIAL_STEPS = [
+    {
+      icon: '🚉',
+      title: 'Bienvenue sur Suivi Anomalies',
+      text: "Cette application permet à toute l'équipe de signaler et suivre les anomalies terrain, avec mise à jour en temps réel pour tout le monde. Ce guide vous montre l'essentiel en quelques étapes — vous pourrez le revoir à tout moment depuis le menu ⋮."
+    },
+    {
+      icon: '📋',
+      title: 'Anomalies par catégorie',
+      text: "Les anomalies sont classées par type d'équipement (Perçage/Insert, Aiguille, Signaux…). Touchez une catégorie pour la déplier et voir la liste de ses anomalies, avec le nombre de \"Non traité\" / \"En cours\" / \"Traité\" affiché à côté de son nom."
+    },
+    {
+      icon: '➕',
+      title: 'Ajouter une anomalie',
+      text: "Appuyez sur le bouton + en bas de l'écran (ou sur \"+ Ajouter\" dans une catégorie dépliée), choisissez la catégorie concernée si besoin, puis remplissez la fiche : voie, PK, équipement, description, priorité…"
+    },
+    {
+      icon: '📷',
+      title: 'Photos',
+      text: "Ajoutez jusqu'à 4 photos par anomalie, directement depuis l'appareil photo ou la galerie. Touchez une photo pour l'agrandir : pincez ou double-tapez pour zoomer, glissez à gauche/droite pour passer à la suivante."
+    },
+    {
+      icon: '⟳',
+      title: 'Changer le statut en un tap',
+      text: "Sur chaque carte de la liste, touchez la pastille de statut (rouge/orange/vert) pour la faire avancer directement : Non traité → En cours → Traité, sans avoir besoin d'ouvrir toute la fiche."
+    },
+    {
+      icon: '🔍',
+      title: 'Retrouver une anomalie',
+      text: "Utilisez la barre de recherche ou les filtres (Non traité, En cours, Traité, Les miennes) en haut de l'écran pour retrouver rapidement ce que vous cherchez, par voie, équipement ou description."
+    },
+    {
+      icon: '📶',
+      title: 'Fonctionne hors connexion',
+      text: "Pas de réseau ? Vous pouvez quand même consulter vos anomalies et en créer de nouvelles. Restez simplement sur l'application jusqu'à voir le message \"Anomalie enregistrée\" avant de la fermer, le temps que la sauvegarde soit bien prise en compte sur votre appareil. Dès que la connexion revient, tout se synchronise automatiquement avec le reste de l'équipe — le point en haut de l'écran passe au vert une fois à jour."
+    },
+    {
+      icon: '⚙️',
+      title: "Personnaliser l'application",
+      text: "Dans le menu ⋮ en haut à droite : modifiez votre nom (utilisé pour identifier vos ajouts et vos traitements), basculez entre mode sombre et mode clair, exportez toutes les anomalies en CSV, et revoyez ce tutoriel quand vous le souhaitez."
+    },
+  ];
+
+  function openTutorial(isFirstRun){
+    modalOpen = true;
+    lockBodyScroll();
+    let step = 0;
+    const total = TUTORIAL_STEPS.length;
+
+    function finish(){
+      markTutorialSeen();
+      closeModal();
+      if(isFirstRun && !profile.name){
+        setTimeout(()=> openProfileModal(), 300);
+      }
+    }
+
+    function renderStep(){
+      const s = TUTORIAL_STEPS[step];
+      $('#modalRoot').innerHTML = `
+        <div class="overlay" id="overlayEl">
+          <div class="sheet">
+            <div class="sheet-handle"></div>
+            <button type="button" class="sheet-close" id="tutoCloseX" aria-label="Fermer">✕</button>
+            <div class="sheet-scroll">
+              <div class="tuto-icon">${s.icon}</div>
+              <h2 class="tuto-title">${escapeHtml(s.title)}</h2>
+              <p class="tuto-text">${escapeHtml(s.text)}</p>
+              <div class="tuto-dots">
+                ${TUTORIAL_STEPS.map((_, i) => `<span class="dot${i === step ? ' active' : ''}"></span>`).join('')}
+              </div>
+            </div>
+            <div class="sheet-actions">
+              <button type="button" class="btn" id="tutoSkip">${step === 0 ? 'Passer' : 'Précédent'}</button>
+              <button type="button" class="btn primary" id="tutoNext">${step === total - 1 ? 'Terminer' : 'Suivant'}</button>
+            </div>
+          </div>
+        </div>
+      `;
+      $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') finish(); });
+      $('#tutoCloseX').addEventListener('click', finish);
+      $('#tutoSkip').addEventListener('click', ()=>{
+        if(step === 0) finish();
+        else { step--; renderStep(); }
+      });
+      $('#tutoNext').addEventListener('click', ()=>{
+        if(step < total - 1){ step++; renderStep(); }
+        else finish();
+      });
+    }
+    renderStep();
   }
 
   function openProfileModal(){
@@ -1321,7 +1479,9 @@ const PHOTOS_COL = 'photos';
     loadProfile();
     render();
     startRealtimeSync();
-    if(!profile.name){
+    if(!hasSeenTutorial()){
+      setTimeout(()=>{ openTutorial(true); }, 400);
+    }else if(!profile.name){
       setTimeout(()=>{ openProfileModal(); }, 400);
     }
   }
