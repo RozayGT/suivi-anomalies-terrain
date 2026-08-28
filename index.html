@@ -81,6 +81,7 @@
     font-size:11.5px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace;
   }
   .sync-dot{width:6px;height:6px;border-radius:50%; background:var(--green); flex-shrink:0;}
+  .sync-dot.offline{background:var(--amber);}
   @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:0.35;}}
   .sync-dot.live{animation:pulse 2.4s ease-in-out infinite;}
 
@@ -304,7 +305,8 @@
 // ==================================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
 import {
-  getFirestore, collection, doc, setDoc, deleteDoc, getDoc, onSnapshot
+  initializeFirestore, persistentLocalCache, persistentSingleTabManager,
+  collection, doc, setDoc, deleteDoc, getDoc, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -316,7 +318,11 @@ const firebaseConfig = {
   appId: "1:780463181895:web:82c75726c71666f2006162"
 };
 const fbApp = initializeApp(firebaseConfig);
-const db = getFirestore(fbApp);
+// Cache local persistant : les lectures/écritures fonctionnent hors connexion
+// et se synchronisent automatiquement dès que le réseau revient.
+const db = initializeFirestore(fbApp, {
+  localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
+});
 const ANOMALIES_COL = 'anomalies';
 const PHOTOS_COL = 'photos';
 
@@ -697,7 +703,7 @@ const PHOTOS_COL = 'photos';
             <div class="sheet-actions">
               ${editing ? `<button type="button" class="btn danger" id="deleteBtn">Supprimer</button>` : ''}
               <button type="button" class="btn" id="cancelForm">Annuler</button>
-              <button type="submit" class="btn primary">Enregistrer</button>
+              <button type="submit" class="btn primary" id="submitBtn">Enregistrer</button>
             </div>
           </form>
         </div>
@@ -770,8 +776,14 @@ const PHOTOS_COL = 'photos';
         if(dataUrl && !pendingPhoto && !removePhoto) renderPhotoZone(dataUrl, false);
       });
     }
+    let isSubmitting = false;
     $('#anomalyForm').addEventListener('submit', async (e)=>{
       e.preventDefault();
+      if(isSubmitting) return;
+      isSubmitting = true;
+      const submitBtn = $('#submitBtn');
+      if(submitBtn){ submitBtn.disabled = true; submitBtn.textContent = 'Enregistrement…'; }
+
       const itemId = editing ? existing.id : uid();
       const nowIso = new Date().toISOString();
 
@@ -888,15 +900,33 @@ const PHOTOS_COL = 'photos';
     showToast('Export CSV téléchargé');
   }
 
-  // ---------------- Sync (temps réel via Firestore) ----------------
+  // ---------------- Sync (temps réel via Firestore, avec cache hors ligne) ----------------
+  function updateSyncStatus(offline, pendingWrites){
+    const dot = $('#syncDot');
+    const label = $('#syncLabel');
+    if(offline){
+      dot.classList.remove('live'); dot.classList.add('offline');
+      label.textContent = pendingWrites
+        ? 'Hors ligne — modifications en attente d\u2019envoi'
+        : 'Hors ligne — dernières données connues';
+    }else{
+      dot.classList.remove('offline'); dot.classList.add('live');
+      label.textContent = 'Synchronisé à ' + nowLabel();
+    }
+  }
+
   function startRealtimeSync(){
-    onSnapshot(collection(db, ANOMALIES_COL), (snapshot)=>{
+    if(!navigator.onLine) updateSyncStatus(true, false);
+    window.addEventListener('offline', ()=> updateSyncStatus(true, false));
+    window.addEventListener('online', ()=> updateSyncStatus(false, false));
+
+    onSnapshot(collection(db, ANOMALIES_COL), { includeMetadataChanges: true }, (snapshot)=>{
       anomalies = snapshot.docs.map(d=> ({ id: d.id, ...d.data() }));
       if(!modalOpen) render();
-      $('#syncLabel').textContent = 'Synchronisé à ' + nowLabel();
+      updateSyncStatus(snapshot.metadata.fromCache, snapshot.metadata.hasPendingWrites);
     }, (error)=>{
       console.error(error);
-      $('#syncLabel').textContent = 'Erreur de connexion à la base de données';
+      updateSyncStatus(true, false);
     });
   }
 
@@ -906,8 +936,7 @@ const PHOTOS_COL = 'photos';
     $('#menuBtn').addEventListener('click', openMenu);
     $('#refreshBtn').addEventListener('click', ()=>{
       render();
-      $('#syncLabel').textContent = 'Synchronisé à ' + nowLabel();
-      showToast('Déjà synchronisé en temps réel ✓');
+      showToast(navigator.onLine ? 'Déjà synchronisé en temps réel ✓' : 'Hors ligne — vos modifications sont en attente');
     });
     $('#filterChips').addEventListener('click', e=>{
       const chip = e.target.closest('.chip');
