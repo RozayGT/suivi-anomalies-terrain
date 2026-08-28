@@ -410,6 +410,23 @@ const PHOTOS_COL = 'photos';
   function haptic(ms){
     try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e){ /* ignore */ }
   }
+  let savedScrollY = 0;
+  function lockBodyScroll(){
+    savedScrollY = window.scrollY || window.pageYOffset || 0;
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${savedScrollY}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    document.body.style.width = '100%';
+  }
+  function unlockBodyScroll(){
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.left = '';
+    document.body.style.right = '';
+    document.body.style.width = '';
+    window.scrollTo(0, savedScrollY);
+  }
   function confirmDialog(message, okLabel, okClass){
     okLabel = okLabel || 'Confirmer';
     okClass = okClass || 'danger-solid';
@@ -649,13 +666,13 @@ const PHOTOS_COL = 'photos';
   // ---------------- Modals ----------------
   function closeModal(){
     modalOpen = false;
-    document.body.style.overflow = '';
+    unlockBodyScroll();
     $('#modalRoot').innerHTML = '';
   }
 
   function openCategoryPicker(){
     modalOpen = true;
-    document.body.style.overflow = 'hidden';
+    lockBodyScroll();
     $('#modalRoot').innerHTML = `
       <div class="overlay" id="overlayEl">
         <div class="sheet">
@@ -679,7 +696,7 @@ const PHOTOS_COL = 'photos';
 
   function openMenu(){
     modalOpen = true;
-    document.body.style.overflow = 'hidden';
+    lockBodyScroll();
     $('#modalRoot').innerHTML = `
       <div class="overlay" id="overlayEl">
         <div class="sheet">
@@ -703,7 +720,7 @@ const PHOTOS_COL = 'photos';
 
   function openProfileModal(){
     modalOpen = true;
-    document.body.style.overflow = 'hidden';
+    lockBodyScroll();
     $('#modalRoot').innerHTML = `
       <div class="overlay" id="overlayEl">
         <div class="sheet">
@@ -739,7 +756,7 @@ const PHOTOS_COL = 'photos';
     const editing = !!anomalyId;
     const existing = editing ? anomalies.find(a=>a.id===anomalyId) : null;
     modalOpen = true;
-    document.body.style.overflow = 'hidden';
+    lockBodyScroll();
 
     const today = new Date().toISOString().slice(0,10);
     const v = existing || {
