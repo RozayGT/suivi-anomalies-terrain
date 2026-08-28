@@ -651,7 +651,7 @@ const PHOTOS_COL = 'photos';
         if(visibleItems.length===0){
           cardsHtml = `<div class="empty-state" style="padding:18px 4px;"><div>Aucune anomalie ${filterActive?'ne correspond au filtre':'enregistrée'} pour l'instant.</div></div>`;
         }else{
-          cardsHtml = visibleItems.slice().sort((a,b)=> (b.updatedAt||'').localeCompare(a.updatedAt||'')).map(a=>{
+          cardsHtml = visibleItems.slice().sort((a,b)=> (b.createdAt||'').localeCompare(a.createdAt||'')).map(a=>{
             const isNew = a.createdAt && (Date.now() - new Date(a.createdAt).getTime()) < 24*60*60*1000;
             return `
             <div class="anomaly-card" data-cat="${cat.id}" data-id="${a.id}">
