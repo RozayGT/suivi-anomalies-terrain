@@ -60,18 +60,17 @@
     position:sticky; top:0; z-index:20;
   }
   .brand{display:flex; align-items:center; gap:10px;}
-  .brand-mark{
-    display:flex; flex-direction:column; gap:3px; width:14px;
+  .brand-icon{
+    width:34px; height:34px; border-radius:9px; background:#E2001A;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    box-shadow:0 2px 6px rgba(226,0,26,0.35);
   }
-  .brand-mark span{display:block; height:2px; background:var(--accent); border-radius:1px;}
-  .brand-mark span:nth-child(2){background:var(--amber);}
-  .brand-mark span:nth-child(3){background:var(--green);}
   .brand h1{font-size:19px; font-weight:600; text-transform:uppercase; color:var(--text);}
   .brand-sub{margin:1px 0 0; font-size:11.5px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace; letter-spacing:0.03em;}
   .header-actions{display:flex; align-items:center; gap:6px;}
   .icon-btn{
     background:var(--panel); border:1px solid var(--line); color:var(--text);
-    width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center;
     font-size:16px; cursor:pointer;
   }
   .icon-btn:active{background:var(--panel-2);}
@@ -103,7 +102,7 @@
   .chips::-webkit-scrollbar{display:none;}
   .chip{
     flex-shrink:0; background:var(--panel); border:1px solid var(--line); color:var(--text-dim);
-    border-radius:999px; padding:7px 13px; font-size:13px; cursor:pointer; white-space:nowrap;
+    border-radius:999px; padding:9px 14px; font-size:13px; cursor:pointer; white-space:nowrap;
   }
   .chip[data-active="true"]{background:var(--accent); border-color:var(--accent); color:#0d1116; font-weight:600;}
   .search-wrap{position:relative;}
@@ -150,8 +149,8 @@
   .card-desc{font-size:13.5px; color:var(--text); margin-bottom:8px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
   .card-bottom{display:flex; justify-content:space-between; align-items:center; gap:8px;}
   .status-pill{
-    display:flex; align-items:center; gap:5px; font-size:12px; cursor:pointer;
-    padding:5px 10px 5px 8px; border-radius:999px; background:var(--panel); border:1px solid var(--line);
+    display:flex; align-items:center; gap:5px; font-size:12.5px; cursor:pointer;
+    padding:8px 13px 8px 10px; border-radius:999px; background:var(--panel); border:1px solid var(--line);
   }
   .status-pill:active{background:var(--panel-2); transform:scale(0.97);}
   .status-pill .cycle-hint{color:var(--text-faint); font-size:11px; margin-left:1px;}
@@ -192,7 +191,7 @@
     position:relative; overscroll-behavior:contain;
   }
   .sheet-close{
-    position:absolute; top:12px; right:12px; width:34px; height:34px; border-radius:50%;
+    position:absolute; top:12px; right:12px; width:38px; height:38px; border-radius:50%;
     background:var(--panel); border:1px solid var(--line); color:var(--text-dim);
     font-size:15px; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:5;
   }
@@ -268,7 +267,14 @@
 <div id="app">
   <div class="topbar">
     <div class="brand">
-      <div class="brand-mark"><span></span><span></span><span></span></div>
+      <div class="brand-icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <rect x="8.5" y="4" width="7" height="9" rx="2" fill="#fff"/>
+          <path d="M6 17.5c0-3.6 2.7-6 6-6s6 2.4 6 6" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/>
+          <circle cx="8" cy="19" r="1.4" fill="#fff"/>
+          <circle cx="16" cy="19" r="1.4" fill="#fff"/>
+        </svg>
+      </div>
       <div>
         <h1>Suivi Anomalies</h1>
         <p class="brand-sub">RÉSEAU TERRAIN</p>
@@ -365,6 +371,9 @@ const PHOTOS_COL = 'photos';
     return String(str==null?'':str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
   function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+  function haptic(ms){
+    try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e){ /* ignore */ }
+  }
   function fmtDate(iso){
     if(!iso) return '—';
     const parts = iso.split('-');
@@ -423,6 +432,7 @@ const PHOTOS_COL = 'photos';
   async function cycleStatus(id){
     const item = anomalies.find(a=>a.id===id);
     if(!item) return;
+    haptic(12);
     const nextStatus = STATUS_CYCLE[item.statut] || 'Non traité';
     const updated = {
       ...item,
@@ -435,6 +445,7 @@ const PHOTOS_COL = 'photos';
       if(!updated.traitePar) updated.traitePar = profile.name || 'Anonyme';
     }
     const ok = await saveAnomalyDoc(updated);
+    if(ok) haptic(18);
     showToast(ok ? `Statut : ${nextStatus}` : "Échec de la mise à jour du statut");
   }
 
@@ -465,7 +476,11 @@ const PHOTOS_COL = 'photos';
   }
 
   function matchesFilters(a){
-    if(activeFilter!=='all' && a.statut!==FILTER_MAP[activeFilter]) return false;
+    if(activeFilter==='mine'){
+      const name = profile.name;
+      if(!name) return false;
+      if(a.createdBy!==name && a.updatedBy!==name && a.traitePar!==name) return false;
+    }else if(activeFilter!=='all' && a.statut!==FILTER_MAP[activeFilter]) return false;
     if(searchTerm){
       const q = searchTerm.toLowerCase();
       const hay = [a.identifiant,a.voie,a.pk,a.equipement,a.description,a.commentaire,a.traitePar].join(' ').toLowerCase();
@@ -487,7 +502,7 @@ const PHOTOS_COL = 'photos';
 
   function renderChips(){
     const wrap = $('#filterChips');
-    const defs = [['all','Toutes'],['non-traite','Non traité'],['en-cours','En cours'],['traite','Traité']];
+    const defs = [['all','Toutes'],['non-traite','Non traité'],['en-cours','En cours'],['traite','Traité'],['mine','Les miennes']];
     wrap.innerHTML = defs.map(([k,label])=>
       `<button class="chip" data-filter="${k}" data-active="${activeFilter===k}">${label}</button>`
     ).join('');
@@ -649,8 +664,10 @@ const PHOTOS_COL = 'photos';
     document.body.style.overflow = 'hidden';
 
     const today = new Date().toISOString().slice(0,10);
+    let lastVoie = '';
+    try{ lastVoie = localStorage.getItem('anomalies_last_voie') || ''; }catch(err){ /* ignore */ }
     const v = existing || {
-      dateConstat: today, voie:'', pk:'', equipement:'', description:'',
+      dateConstat: today, voie: lastVoie, pk:'', equipement:'', description:'',
       priorite:'Moyenne', statut:'Non traité', dateTraitement:'', traitePar: profile.name||'', commentaire:''
     };
 
@@ -665,17 +682,17 @@ const PHOTOS_COL = 'photos';
             <div class="field-row">
               <div class="field">
                 <label for="f_voie">Voie *</label>
-                <input id="f_voie" list="voiesList" required value="${escapeHtml(v.voie)}" placeholder="ex : 2L">
+                <input id="f_voie" list="voiesList" required autocomplete="off" value="${escapeHtml(v.voie)}" placeholder="ex : 2L">
                 <datalist id="voiesList">${VOIES.map(x=>`<option value="${escapeHtml(x)}">`).join('')}</datalist>
               </div>
               <div class="field">
                 <label for="f_pk">PK</label>
-                <input id="f_pk" type="text" value="${escapeHtml(v.pk)}" placeholder="ex : 12+300">
+                <input id="f_pk" type="text" autocomplete="off" value="${escapeHtml(v.pk)}" placeholder="ex : 12+300">
               </div>
             </div>
             <div class="field">
               <label for="f_equip">Équipement / repère *</label>
-              <input id="f_equip" type="text" required value="${escapeHtml(v.equipement)}" placeholder="ex : Aiguille 14">
+              <input id="f_equip" type="text" required autocomplete="off" autocapitalize="words" value="${escapeHtml(v.equipement)}" placeholder="ex : Aiguille 14">
             </div>
             <div class="field-row">
               <div class="field">
@@ -717,7 +734,7 @@ const PHOTOS_COL = 'photos';
             </div>
             <div class="field">
               <label for="f_par">Traité par</label>
-              <input id="f_par" type="text" value="${escapeHtml(v.traitePar)}" placeholder="votre nom">
+              <input id="f_par" type="text" autocomplete="off" autocapitalize="words" value="${escapeHtml(v.traitePar)}" placeholder="votre nom">
             </div>
             <div class="field">
               <label for="f_comment">Commentaire / action réalisée</label>
@@ -746,6 +763,7 @@ const PHOTOS_COL = 'photos';
         if(!confirm(`Supprimer l'anomalie ${existing.identifiant} ? Cette action est irréversible.`)) return;
         await deleteAnomalyDoc(existing.id);
         if(existing.hasPhoto) await deletePhotoDoc(existing.id);
+        haptic(18);
         closeModal();
         showToast('Anomalie supprimée');
       });
@@ -856,6 +874,10 @@ const PHOTOS_COL = 'photos';
         };
       }
       const ok = await saveAnomalyDoc(finalItem);
+      if(ok){
+        haptic(18);
+        try{ localStorage.setItem('anomalies_last_voie', payload.voie); }catch(err){ /* ignore */ }
+      }
       expanded.add(catId);
       closeModal();
       showToast(ok ? 'Anomalie enregistrée' : "Échec de l'enregistrement — réessayez");
@@ -970,6 +992,11 @@ const PHOTOS_COL = 'photos';
     $('#filterChips').addEventListener('click', e=>{
       const chip = e.target.closest('.chip');
       if(!chip) return;
+      if(chip.dataset.filter === 'mine' && !profile.name){
+        showToast('Indiquez votre nom pour utiliser ce filtre');
+        openProfileModal();
+        return;
+      }
       activeFilter = chip.dataset.filter;
       render();
     });
