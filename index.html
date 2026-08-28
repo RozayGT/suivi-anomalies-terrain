@@ -265,17 +265,17 @@
 
   .photo-actions{display:flex; gap:8px; margin-bottom:10px;}
   .photo-actions .btn{padding:10px 8px; font-size:13px; flex:1;}
-  .photo-preview{position:relative; margin-bottom:10px;}
-  .photo-preview img{width:100%; max-height:220px; object-fit:cover; border-radius:10px; border:1px solid var(--line); display:block; cursor:zoom-in;}
-  .photo-preview .remove-photo{
-    position:absolute; top:8px; right:8px; width:30px; height:30px; border-radius:50%;
-    background:rgba(15,17,20,0.75); color:#fff; border:none; font-size:15px; cursor:pointer;
+  .photo-actions .btn:disabled{opacity:0.4; cursor:not-allowed;}
+  .photo-gallery{display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; margin-bottom:10px; min-height:72px;}
+  .photo-thumb{position:relative; flex-shrink:0; width:72px; height:72px; border-radius:10px; overflow:hidden; border:1px solid var(--line); background:var(--panel);}
+  .photo-thumb img{width:100%; height:100%; object-fit:cover; display:block; cursor:zoom-in;}
+  .photo-thumb .remove-photo{
+    position:absolute; top:3px; right:3px; width:22px; height:22px; border-radius:50%;
+    background:rgba(15,17,20,0.8); color:#fff; border:none; font-size:11px; cursor:pointer;
     display:flex; align-items:center; justify-content:center;
   }
-  .photo-placeholder{
-    border:1px dashed var(--line); border-radius:10px; padding:16px; text-align:center;
-    color:var(--text-faint); font-size:12.5px; margin-bottom:10px;
-  }
+  .photo-thumb.loading{display:flex; align-items:center; justify-content:center; color:var(--text-faint); font-size:9.5px; text-align:center; padding:4px;}
+  .photo-hint{color:var(--text-faint); font-size:12px; align-self:center;}
   .lightbox{position:fixed; inset:0; background:rgba(6,8,10,0.92); z-index:90; display:flex; align-items:center; justify-content:center; padding:20px;}
   .lightbox img{max-width:100%; max-height:100%; border-radius:8px;}
 
@@ -411,7 +411,10 @@ const PHOTOS_COL = 'photos';
     try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e){ /* ignore */ }
   }
   let savedScrollY = 0;
+  let bodyScrollLocked = false;
   function lockBodyScroll(){
+    if(bodyScrollLocked) return;
+    bodyScrollLocked = true;
     savedScrollY = window.scrollY || window.pageYOffset || 0;
     document.body.style.position = 'fixed';
     document.body.style.top = `-${savedScrollY}px`;
@@ -420,6 +423,8 @@ const PHOTOS_COL = 'photos';
     document.body.style.width = '100%';
   }
   function unlockBodyScroll(){
+    if(!bodyScrollLocked) return;
+    bodyScrollLocked = false;
     document.body.style.position = '';
     document.body.style.top = '';
     document.body.style.left = '';
@@ -501,6 +506,15 @@ const PHOTOS_COL = 'photos';
       const snap = await getDoc(doc(db, PHOTOS_COL, id));
       return snap.exists() ? (snap.data().data || null) : null;
     }catch(e){ return null; }
+  }
+
+  const MAX_PHOTOS = 4;
+  // Renvoie la liste des identifiants de photos d'une anomalie.
+  // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
+  function getPhotoIds(anomaly){
+    if(anomaly.photoIds && anomaly.photoIds.length) return anomaly.photoIds.slice();
+    if(anomaly.hasPhoto) return [anomaly.id];
+    return [];
   }
 
   const STATUS_CYCLE = {'Non traité':'En cours', 'En cours':'Traité', 'Traité':'Non traité'};
@@ -620,7 +634,7 @@ const PHOTOS_COL = 'photos';
             return `
             <div class="anomaly-card" data-cat="${cat.id}" data-id="${a.id}">
               <div class="card-top">
-                <span class="identifiant">${escapeHtml(a.identifiant)}${a.hasPhoto ? ' 📷' : ''}${isNew ? ' <span class="new-badge">NOUVEAU</span>' : ''}</span>
+                <span class="identifiant">${escapeHtml(a.identifiant)}${(()=>{const n=getPhotoIds(a).length; return n>0 ? ' 📷'+(n>1?'×'+n:'') : '';})()}${isNew ? ' <span class="new-badge">NOUVEAU</span>' : ''}</span>
                 <span class="priority-chip ${priorityClass(a.priorite)}">${escapeHtml(a.priorite)}</span>
               </div>
               <div class="card-meta">${escapeHtml(a.voie||'—')} · PK ${escapeHtml(a.pk||'—')} · ${escapeHtml(a.equipement||'—')}</div>
@@ -803,8 +817,8 @@ const PHOTOS_COL = 'photos';
               <textarea id="f_desc" required placeholder="Décrivez ce qui a été constaté sur le terrain">${escapeHtml(v.description)}</textarea>
             </div>
             <div class="field">
-              <label>Photo</label>
-              <div id="photoZone"><div class="photo-placeholder">Aucune photo</div></div>
+              <label>Photos <span style="text-transform:none; color:var(--text-faint);">(${MAX_PHOTOS} max)</span></label>
+              <div id="photoGallery" class="photo-gallery"></div>
               <div class="photo-actions">
                 <button type="button" class="btn" id="takePhotoBtn">📷 Prendre une photo</button>
                 <button type="button" class="btn" id="pickPhotoBtn">🖼️ Galerie</button>
@@ -857,66 +871,112 @@ const PHOTOS_COL = 'photos';
         const ok = await confirmDialog(`Supprimer l'anomalie ${existing.identifiant} ? Cette action est irréversible.`, 'Supprimer', 'danger-solid');
         if(!ok) return;
         await deleteAnomalyDoc(existing.id);
-        if(existing.hasPhoto) await deletePhotoDoc(existing.id);
+        for(const pid of getPhotoIds(existing)){ await deletePhotoDoc(pid); }
         haptic(18);
         closeModal();
         showToast('Anomalie supprimée');
       });
     }
 
-    // ---- Photo capture wiring ----
-    let pendingPhoto = null;   // newly captured/picked dataURL, not yet saved
-    let removePhoto = false;   // user asked to remove existing photo
+    // ---- Photo capture wiring (multi-photos, max MAX_PHOTOS) ----
+    let existingPhotos = [];   // [{id, dataUrl}] déjà enregistrées (chargées de manière async)
+    let pendingNewPhotos = []; // [dataUrl] fraîchement capturées, pas encore enregistrées
+    let removedPhotoIds = [];  // ids des photos existantes à supprimer à l'enregistrement
+    let galleryLoading = getPhotoIds(existing || {}).length > 0 && editing;
 
-    function renderPhotoZone(dataUrl, loading){
-      const zone = $('#photoZone');
-      if(loading){
-        zone.innerHTML = `<div class="photo-placeholder">Chargement de la photo…</div>`;
-        return;
+    function totalPhotoCount(){ return existingPhotos.length + pendingNewPhotos.length; }
+
+    function renderPhotoGallery(){
+      const zone = $('#photoGallery');
+      let html = '';
+      existingPhotos.forEach((p, idx)=>{
+        html += `
+          <div class="photo-thumb" data-kind="existing" data-idx="${idx}">
+            <img src="${p.dataUrl}" alt="Photo ${idx+1}">
+            <button type="button" class="remove-photo" data-remove-existing="${idx}">✕</button>
+          </div>`;
+      });
+      pendingNewPhotos.forEach((dataUrl, idx)=>{
+        html += `
+          <div class="photo-thumb" data-kind="pending" data-idx="${idx}">
+            <img src="${dataUrl}" alt="Nouvelle photo ${idx+1}">
+            <button type="button" class="remove-photo" data-remove-pending="${idx}">✕</button>
+          </div>`;
+      });
+      if(galleryLoading){
+        html += `<div class="photo-thumb loading">Chargement…</div>`;
       }
-      if(dataUrl){
-        zone.innerHTML = `<div class="photo-preview"><img id="photoImg" src="${dataUrl}" alt="Photo de l'anomalie"><button type="button" class="remove-photo" id="removePhotoBtn">✕</button></div>`;
-        $('#photoImg').addEventListener('click', ()=> openLightbox(dataUrl));
-        $('#removePhotoBtn').addEventListener('click', ()=>{
-          pendingPhoto = null;
-          removePhoto = true;
-          renderPhotoZone(null, false);
+      zone.innerHTML = html;
+
+      zone.querySelectorAll('img').forEach(img=>{
+        img.addEventListener('click', ()=> openLightbox(img.src));
+      });
+      zone.querySelectorAll('[data-remove-existing]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const idx = parseInt(btn.dataset.removeExisting, 10);
+          removedPhotoIds.push(existingPhotos[idx].id);
+          existingPhotos.splice(idx, 1);
+          renderPhotoGallery();
+          updatePhotoButtonsState();
         });
-      }else{
-        zone.innerHTML = `<div class="photo-placeholder">Aucune photo</div>`;
-      }
+      });
+      zone.querySelectorAll('[data-remove-pending]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const idx = parseInt(btn.dataset.removePending, 10);
+          pendingNewPhotos.splice(idx, 1);
+          renderPhotoGallery();
+          updatePhotoButtonsState();
+        });
+      });
+    }
+
+    function updatePhotoButtonsState(){
+      const full = totalPhotoCount() >= MAX_PHOTOS;
+      $('#takePhotoBtn').disabled = full;
+      $('#pickPhotoBtn').disabled = full;
     }
 
     async function handleFile(file){
       if(!file) return;
-      renderPhotoZone(null, true);
+      if(totalPhotoCount() >= MAX_PHOTOS){
+        showToast(`Maximum ${MAX_PHOTOS} photos par anomalie`);
+        return;
+      }
+      galleryLoading = true;
+      renderPhotoGallery();
       try{
         let dataUrl = await compressImageFile(file, 1100, 0.7);
         if(dataUrl.length > 700000) dataUrl = await compressImageFile(file, 1100, 0.45);
         if(dataUrl.length > 700000) dataUrl = await compressImageFile(file, 850, 0.4);
         if(dataUrl.length > 900000){
           showToast("Photo trop volumineuse même compressée — réessayez avec une autre photo");
-          renderPhotoZone(null, false);
-          return;
+        }else{
+          pendingNewPhotos.push(dataUrl);
         }
-        pendingPhoto = dataUrl;
-        removePhoto = false;
-        renderPhotoZone(dataUrl, false);
       }catch(err){
-        renderPhotoZone(null, false);
         showToast("Impossible de traiter cette photo");
       }
+      galleryLoading = false;
+      renderPhotoGallery();
+      updatePhotoButtonsState();
     }
     $('#takePhotoBtn').addEventListener('click', ()=> $('#cameraInput').click());
     $('#pickPhotoBtn').addEventListener('click', ()=> $('#galleryInput').click());
-    $('#cameraInput').addEventListener('change', e=> handleFile(e.target.files[0]));
-    $('#galleryInput').addEventListener('change', e=> handleFile(e.target.files[0]));
+    $('#cameraInput').addEventListener('change', e=>{ handleFile(e.target.files[0]); e.target.value=''; });
+    $('#galleryInput').addEventListener('change', e=>{ handleFile(e.target.files[0]); e.target.value=''; });
 
-    if(editing && existing.hasPhoto){
-      renderPhotoZone(null, true);
-      getPhotoDoc(existing.id).then(dataUrl=>{
-        if(dataUrl && !pendingPhoto && !removePhoto) renderPhotoZone(dataUrl, false);
-      });
+    renderPhotoGallery();
+    updatePhotoButtonsState();
+    if(editing){
+      const ids = getPhotoIds(existing);
+      if(ids.length){
+        Promise.all(ids.map(id => getPhotoDoc(id).then(dataUrl => ({id, dataUrl})))).then(results=>{
+          existingPhotos = results.filter(r => r.dataUrl);
+          galleryLoading = false;
+          renderPhotoGallery();
+          updatePhotoButtonsState();
+        });
+      }
     }
     let isSubmitting = false;
     $('#anomalyForm').addEventListener('submit', async (e)=>{
@@ -944,15 +1004,14 @@ const PHOTOS_COL = 'photos';
       const itemId = editing ? existing.id : uid();
       const nowIso = new Date().toISOString();
 
-      // Enregistre d'abord la photo, pour que hasPhoto reflète le résultat réel
-      let hasPhoto = editing ? !!existing.hasPhoto : false;
-      if(pendingPhoto){
-        const ok = await savePhotoDoc(itemId, pendingPhoto);
-        hasPhoto = ok;
-        if(!ok) showToast("La photo n'a pas pu être envoyée (trop lourde ?)");
-      }else if(removePhoto && hasPhoto){
-        await deletePhotoDoc(itemId);
-        hasPhoto = false;
+      // Supprime les photos retirées, sauvegarde les nouvelles, garde les existantes conservées
+      for(const pid of removedPhotoIds){ await deletePhotoDoc(pid); }
+      const finalPhotoIds = existingPhotos.map(p => p.id);
+      for(const dataUrl of pendingNewPhotos){
+        const pid = uid();
+        const ok = await savePhotoDoc(pid, dataUrl);
+        if(ok) finalPhotoIds.push(pid);
+        else showToast("Une photo n'a pas pu être envoyée (trop lourde ?)");
       }
 
       const payload = {
@@ -962,7 +1021,7 @@ const PHOTOS_COL = 'photos';
         dateConstat: $('#f_date').value,
         priorite: $('#f_prio').value,
         description: $('#f_desc').value.trim(),
-        hasPhoto: hasPhoto,
+        photoIds: finalPhotoIds,
         statut: $('#f_statut').value,
         dateTraitement: $('#f_datetr').value,
         traitePar: $('#f_par').value.trim(),
@@ -973,6 +1032,7 @@ const PHOTOS_COL = 'photos';
       let finalItem;
       if(editing){
         finalItem = {...existing, ...payload, id: itemId};
+        delete finalItem.hasPhoto; // migration : remplacé par photoIds
       }else{
         finalItem = {
           id: itemId,
@@ -1039,10 +1099,10 @@ const PHOTOS_COL = 'photos';
   }
 
   function exportCSV(){
-    const headers = ['Catégorie','Identifiant','Date de constat','Voie','PK','Équipement','Description','Photo jointe','Priorité','Statut','Date de traitement','Traité par','Commentaire'];
+    const headers = ['Catégorie','Identifiant','Date de constat','Voie','PK','Équipement','Description','Nb photos','Priorité','Statut','Date de traitement','Traité par','Commentaire'];
     const rows = anomalies.map(a=>{
       const catLabel = (CATEGORIES.find(c=>c.id===a.category)||{}).label || a.category;
-      return [catLabel,a.identifiant,fmtDate(a.dateConstat),a.voie,a.pk,a.equipement,a.description,(a.hasPhoto?'Oui':'Non'),a.priorite,a.statut,fmtDate(a.dateTraitement),a.traitePar,a.commentaire]
+      return [catLabel,a.identifiant,fmtDate(a.dateConstat),a.voie,a.pk,a.equipement,a.description,getPhotoIds(a).length,a.priorite,a.statut,fmtDate(a.dateTraitement),a.traitePar,a.commentaire]
         .map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`).join(',');
     });
     const csv = [headers.join(','), ...rows].join('\r\n');
