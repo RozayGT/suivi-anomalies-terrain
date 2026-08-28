@@ -4,6 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Suivi Anomalies Terrain</title>
+
+<!-- Icône d'app / installation écran d'accueil -->
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<meta name="theme-color" content="#161a20">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Anomalies">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -185,10 +195,9 @@
     display:flex; align-items:flex-end; justify-content:center;
   }
   .sheet{
-    background:var(--bg-alt); width:100%; max-width:640px; max-height:92vh; overflow-y:auto;
+    background:var(--bg-alt); width:100%; max-width:640px; max-height:92vh;
     border-radius:18px 18px 0 0; border:1px solid var(--line); border-bottom:none;
-    padding:18px 18px calc(18px + env(safe-area-inset-bottom));
-    position:relative; overscroll-behavior:contain;
+    position:relative; display:flex; flex-direction:column; overflow:hidden;
   }
   .sheet-close{
     position:absolute; top:12px; right:12px; width:38px; height:38px; border-radius:50%;
@@ -196,7 +205,11 @@
     font-size:15px; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:5;
   }
   .sheet-close:active{background:var(--panel-2);}
-  .sheet-handle{width:36px; height:4px; background:var(--line); border-radius:2px; margin:0 auto 14px;}
+  .sheet-handle{width:36px; height:4px; background:var(--line); border-radius:2px; margin:12px auto 2px; flex-shrink:0;}
+  .sheet-scroll{
+    flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain;
+    padding:12px 18px calc(18px + env(safe-area-inset-bottom));
+  }
   .sheet h2{font-size:17px; margin-bottom:2px;}
   .sheet .sheet-sub{font-size:12.5px; color:var(--text-dim); margin-bottom:16px; font-family:'IBM Plex Mono',monospace;}
   .field{margin-bottom:13px;}
@@ -214,10 +227,8 @@
   .section-divider{border:none; border-top:1px solid var(--line); margin:16px 0 14px;}
   .section-divider-label{font-size:11.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.05em; margin:-10px 0 12px;}
   .sheet-actions{
-    display:flex; gap:10px;
-    position:sticky; bottom:calc(-1 * (18px + env(safe-area-inset-bottom)));
+    flex-shrink:0; display:flex; gap:10px;
     background:var(--bg-alt);
-    margin:16px -18px calc(-1 * (18px + env(safe-area-inset-bottom)));
     padding:14px 18px calc(14px + env(safe-area-inset-bottom));
     border-top:1px solid var(--line);
   }
@@ -289,10 +300,12 @@
     <div class="brand">
       <div class="brand-icon" aria-hidden="true">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <rect x="8.5" y="4" width="7" height="9" rx="2" fill="#fff"/>
-          <path d="M6 17.5c0-3.6 2.7-6 6-6s6 2.4 6 6" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/>
-          <circle cx="8" cy="19" r="1.4" fill="#fff"/>
-          <circle cx="16" cy="19" r="1.4" fill="#fff"/>
+          <line x1="3.5" y1="7.5" x2="20.5" y2="7.5" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/>
+          <line x1="3.5" y1="16.5" x2="20.5" y2="16.5" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/>
+          <line x1="6.5" y1="5.3" x2="6.5" y2="18.7" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
+          <line x1="10.5" y1="5.3" x2="10.5" y2="18.7" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
+          <line x1="14.5" y1="5.3" x2="14.5" y2="18.7" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
+          <line x1="18.5" y1="5.3" x2="18.5" y2="18.7" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
         </svg>
       </div>
       <div>
@@ -645,10 +658,12 @@ const PHOTOS_COL = 'photos';
         <div class="sheet">
           <div class="sheet-handle"></div>
           <button type="button" class="sheet-close" data-close aria-label="Fermer">✕</button>
-          <h2>Nouvelle anomalie</h2>
-          <p class="sheet-sub">Choisir une catégorie d'équipement</p>
-          <div class="picker-list">
-            ${CATEGORIES.map(c=>`<div class="picker-item" data-cat="${c.id}">${escapeHtml(c.label)} <span class="pcode">${c.prefix}</span></div>`).join('')}
+          <div class="sheet-scroll">
+            <h2>Nouvelle anomalie</h2>
+            <p class="sheet-sub">Choisir une catégorie d'équipement</p>
+            <div class="picker-list">
+              ${CATEGORIES.map(c=>`<div class="picker-item" data-cat="${c.id}">${escapeHtml(c.label)} <span class="pcode">${c.prefix}</span></div>`).join('')}
+            </div>
           </div>
         </div>
       </div>
@@ -667,11 +682,13 @@ const PHOTOS_COL = 'photos';
         <div class="sheet">
           <div class="sheet-handle"></div>
           <button type="button" class="sheet-close" data-close aria-label="Fermer">✕</button>
-          <h2>Menu</h2>
-          <p class="sheet-sub">${profile.name ? 'Connecté en tant que '+escapeHtml(profile.name) : 'Aucun nom enregistré'}</p>
-          <div class="menu-list">
-            <button class="menu-item" id="menuProfile">✎ Modifier mon nom</button>
-            <button class="menu-item" id="menuExport">⇩ Exporter en CSV</button>
+          <div class="sheet-scroll">
+            <h2>Menu</h2>
+            <p class="sheet-sub">${profile.name ? 'Connecté en tant que '+escapeHtml(profile.name) : 'Aucun nom enregistré'}</p>
+            <div class="menu-list">
+              <button class="menu-item" id="menuProfile">✎ Modifier mon nom</button>
+              <button class="menu-item" id="menuExport">⇩ Exporter en CSV</button>
+            </div>
           </div>
         </div>
       </div>
@@ -689,11 +706,13 @@ const PHOTOS_COL = 'photos';
         <div class="sheet">
           <div class="sheet-handle"></div>
           <button type="button" class="sheet-close" data-close aria-label="Fermer">✕</button>
-          <h2>Votre nom</h2>
-          <p class="sheet-sub">Utilisé pour identifier vos ajouts et traitements</p>
-          <div class="field">
-            <label for="nameInput">Nom / prénom</label>
-            <input id="nameInput" type="text" value="${escapeHtml(profile.name)}" placeholder="ex : J. Martin" maxlength="60">
+          <div class="sheet-scroll">
+            <h2>Votre nom</h2>
+            <p class="sheet-sub">Utilisé pour identifier vos ajouts et traitements</p>
+            <div class="field">
+              <label for="nameInput">Nom / prénom</label>
+              <input id="nameInput" type="text" value="${escapeHtml(profile.name)}" placeholder="ex : J. Martin" maxlength="60">
+            </div>
           </div>
           <div class="sheet-actions">
             <button class="btn" id="cancelName">Annuler</button>
@@ -730,6 +749,7 @@ const PHOTOS_COL = 'photos';
         <div class="sheet">
           <div class="sheet-handle"></div>
           <button type="button" class="sheet-close" data-close aria-label="Fermer">✕</button>
+          <div class="sheet-scroll">
           <h2>${editing ? escapeHtml(existing.identifiant) : 'Nouvelle anomalie'}</h2>
           <p class="sheet-sub">${escapeHtml(cat.label)}</p>
           <form id="anomalyForm">
@@ -794,13 +814,13 @@ const PHOTOS_COL = 'photos';
               <label for="f_comment">Commentaire / action réalisée</label>
               <textarea id="f_comment" placeholder="Actions menées, pièces changées…">${escapeHtml(v.commentaire)}</textarea>
             </div>
-
-            <div class="sheet-actions">
-              ${editing ? `<button type="button" class="btn danger" id="deleteBtn">Supprimer</button>` : ''}
-              <button type="button" class="btn" id="cancelForm">Annuler</button>
-              <button type="submit" class="btn primary" id="submitBtn">Enregistrer</button>
-            </div>
           </form>
+          </div>
+          <div class="sheet-actions">
+            ${editing ? `<button type="button" class="btn danger" id="deleteBtn">Supprimer</button>` : ''}
+            <button type="button" class="btn" id="cancelForm">Annuler</button>
+            <button type="submit" form="anomalyForm" class="btn primary" id="submitBtn">Enregistrer</button>
+          </div>
         </div>
       </div>
     `;
