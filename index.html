@@ -149,7 +149,12 @@
   .card-meta{font-size:12px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace; margin-bottom:6px;}
   .card-desc{font-size:13.5px; color:var(--text); margin-bottom:8px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
   .card-bottom{display:flex; justify-content:space-between; align-items:center; gap:8px;}
-  .status-pill{display:flex; align-items:center; gap:5px; font-size:12px;}
+  .status-pill{
+    display:flex; align-items:center; gap:5px; font-size:12px; cursor:pointer;
+    padding:5px 10px 5px 8px; border-radius:999px; background:var(--panel); border:1px solid var(--line);
+  }
+  .status-pill:active{background:var(--panel-2); transform:scale(0.97);}
+  .status-pill .cycle-hint{color:var(--text-faint); font-size:11px; margin-left:1px;}
   .status-pill .dot{width:8px; height:8px; border-radius:50%;}
   .status-pill.non-traite .dot{background:var(--red);}
   .status-pill.en-cours .dot{background:var(--amber);}
@@ -414,6 +419,25 @@ const PHOTOS_COL = 'photos';
     }catch(e){ return null; }
   }
 
+  const STATUS_CYCLE = {'Non traité':'En cours', 'En cours':'Traité', 'Traité':'Non traité'};
+  async function cycleStatus(id){
+    const item = anomalies.find(a=>a.id===id);
+    if(!item) return;
+    const nextStatus = STATUS_CYCLE[item.statut] || 'Non traité';
+    const updated = {
+      ...item,
+      statut: nextStatus,
+      updatedAt: new Date().toISOString(),
+      updatedBy: profile.name || 'Anonyme',
+    };
+    if(nextStatus === 'Traité'){
+      if(!updated.dateTraitement) updated.dateTraitement = new Date().toISOString().slice(0,10);
+      if(!updated.traitePar) updated.traitePar = profile.name || 'Anonyme';
+    }
+    const ok = await saveAnomalyDoc(updated);
+    showToast(ok ? `Statut : ${nextStatus}` : "Échec de la mise à jour du statut");
+  }
+
   function nextIdentifiant(catId){
     const cat = CATEGORIES.find(c=>c.id===catId);
     let max = 0;
@@ -498,7 +522,7 @@ const PHOTOS_COL = 'photos';
               <div class="card-meta">${escapeHtml(a.voie||'—')} · PK ${escapeHtml(a.pk||'—')} · ${escapeHtml(a.equipement||'—')}</div>
               <div class="card-desc">${escapeHtml(a.description||'')}</div>
               <div class="card-bottom">
-                <span class="status-pill ${statusClass(a.statut)}"><span class="dot"></span>${escapeHtml(a.statut)}</span>
+                <span class="status-pill ${statusClass(a.statut)}"><span class="dot"></span>${escapeHtml(a.statut)}<span class="cycle-hint">⟳</span></span>
                 <span class="card-by">${a.updatedBy ? 'Modifié par '+escapeHtml(a.updatedBy) : ''}</span>
               </div>
             </div>
@@ -712,6 +736,11 @@ const PHOTOS_COL = 'photos';
 
     $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') closeModal(); });
     $('#cancelForm').addEventListener('click', closeModal);
+    $('#f_statut').addEventListener('change', ()=>{
+      if($('#f_statut').value === 'Traité' && !$('#f_datetr').value){
+        $('#f_datetr').value = new Date().toISOString().slice(0,10);
+      }
+    });
     if(editing){
       $('#deleteBtn').addEventListener('click', async ()=>{
         if(!confirm(`Supprimer l'anomalie ${existing.identifiant} ? Cette action est irréversible.`)) return;
@@ -951,6 +980,12 @@ const PHOTOS_COL = 'photos';
     $('#categoryList').addEventListener('click', e=>{
       const addBtn = e.target.closest('.add-anomaly-btn');
       if(addBtn){ openForm(addBtn.dataset.cat); return; }
+      const pill = e.target.closest('.status-pill');
+      if(pill){
+        const cardEl = pill.closest('.anomaly-card');
+        if(cardEl) cycleStatus(cardEl.dataset.id);
+        return;
+      }
       const card = e.target.closest('.anomaly-card');
       if(card){ openForm(card.dataset.cat, card.dataset.id); return; }
       const header = e.target.closest('.category-header');
