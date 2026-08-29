@@ -859,8 +859,8 @@ const PHOTOS_COL = 'photos';
     },
     {
       icon: '📋',
-      title: 'Résumé à l\u2019ouverture',
-      text: "À chaque ouverture, l'application vous indique combien de nouvelles anomalies ont été ajoutées par vos collègues depuis votre dernière visite (par exemple \"3 nouvelles anomalies depuis votre dernière visite\"). Pratique pour ne rien manquer sans tout reparcourir. Cette information reste propre à votre téléphone, elle n'est pas partagée avec les autres."
+      title: 'Prévenu des nouveautés',
+      text: "L'application vous signale les anomalies ajoutées par vos collègues depuis votre dernière visite, avec un message du type \"3 nouvelles anomalies depuis votre dernière visite\". Pratique pour ne rien manquer sans tout reparcourir. Cette information reste propre à votre téléphone, elle n'est pas partagée avec les autres."
     },
     {
       icon: '⚙️',
@@ -1424,16 +1424,22 @@ const PHOTOS_COL = 'photos';
     try{ localStorage.setItem('anomalies_last_seen', new Date().toISOString()); }catch(e){ /* ignore */ }
   }
 
-  let firstSnapshotHandled = false;
-  function showOpeningSummary(list){
+  const notifiedAnomalyIds = new Set();
+  function checkForNewAnomalies(list){
     const previous = getLastSeen();
-    if(previous){
-      const count = list.filter(a =>
-        a.createdAt && a.createdAt > previous && a.createdBy !== profile.name
-      ).length;
-      if(count > 0){
-        showToast(count === 1 ? '📋 1 nouvelle anomalie depuis votre dernière visite' : `📋 ${count} nouvelles anomalies depuis votre dernière visite`, 4500);
-      }
+    if(!previous){
+      updateLastSeen();
+      return;
+    }
+    const newOnes = list.filter(a =>
+      a.createdAt && a.createdAt > previous &&
+      a.createdBy !== profile.name &&
+      !notifiedAnomalyIds.has(a.id)
+    );
+    if(newOnes.length > 0){
+      newOnes.forEach(a => notifiedAnomalyIds.add(a.id));
+      const count = newOnes.length;
+      showToast(count === 1 ? '📋 1 nouvelle anomalie depuis votre dernière visite' : `📋 ${count} nouvelles anomalies depuis votre dernière visite`, 4500);
     }
     updateLastSeen();
   }
@@ -1442,24 +1448,12 @@ const PHOTOS_COL = 'photos';
     if(!navigator.onLine) updateSyncStatus(true, false);
     window.addEventListener('offline', ()=> updateSyncStatus(true, false));
     window.addEventListener('online', ()=> updateSyncStatus(false, false));
-    document.addEventListener('visibilitychange', ()=>{
-      if(document.visibilityState === 'hidden'){
-        // Réarme la vérification : la prochaine donnée reçue (après un retour au
-        // premier plan, même sans rechargement complet de la page) sera traitée
-        // comme une "nouvelle ouverture" et déclenchera le résumé si besoin.
-        firstSnapshotHandled = false;
-      }
-    });
-    window.addEventListener('pagehide', updateLastSeen);
 
     onSnapshot(collection(db, ANOMALIES_COL), { includeMetadataChanges: true }, (snapshot)=>{
       anomalies = snapshot.docs.map(d=> ({ id: d.id, ...d.data() }));
       if(!modalOpen) render();
       updateSyncStatus(snapshot.metadata.fromCache, snapshot.metadata.hasPendingWrites);
-      if(!firstSnapshotHandled){
-        firstSnapshotHandled = true;
-        showOpeningSummary(anomalies);
-      }
+      checkForNewAnomalies(anomalies);
     }, (error)=>{
       console.error(error);
       updateSyncStatus(true, false);
