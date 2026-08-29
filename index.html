@@ -1568,16 +1568,37 @@ const PHOTOS_COL = 'photos';
     });
   }
 
+  let updateReloading = false;
+  async function checkForAppUpdate(){
+    if(updateReloading) return;
+    try{
+      const res = await fetch('index.html?v=' + Date.now(), { cache: 'no-store' });
+      if(!res.ok) return;
+      const text = await res.text();
+      const m = text.match(/APP_VERSION\s*=\s*'([^']+)'/);
+      if(m && m[1] !== APP_VERSION){
+        updateReloading = true;
+        location.reload();
+      }
+    }catch(e){ /* hors ligne ou indisponible : on réessaiera plus tard */ }
+  }
+
   function setupAutoUpdate(){
+    // Vérification active : compare la version chargée à celle publiée en ligne.
+    // C'est ce qui garantit la mise à jour même quand le téléphone réaffiche
+    // l'application depuis sa mémoire sans recharger la page.
+    setTimeout(checkForAppUpdate, 1500);
+    document.addEventListener('visibilitychange', ()=>{
+      if(document.visibilityState === 'visible') checkForAppUpdate();
+    });
+
     if(!('serviceWorker' in navigator)) return;
-    let reloading = false;
     navigator.serviceWorker.addEventListener('controllerchange', ()=>{
-      if(reloading) return;
-      reloading = true;
+      if(updateReloading) return;
+      updateReloading = true;
       location.reload();
     });
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg)=>{
-      // Vérifie l'existence d'une nouvelle version à chaque retour dans l'app.
       document.addEventListener('visibilitychange', ()=>{
         if(document.visibilityState === 'visible') reg.update().catch(()=>{});
       });
