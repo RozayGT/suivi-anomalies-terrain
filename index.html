@@ -597,7 +597,7 @@ const PHOTOS_COL = 'photos';
     }catch(e){ return null; }
   }
 
-  const APP_VERSION = '1.0';
+  const APP_VERSION = '1.2';
   const MAX_PHOTOS = 4;
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
@@ -824,6 +824,7 @@ const PHOTOS_COL = 'photos';
               <button class="menu-item" id="menuTheme">${themeLabel}</button>
               <button class="menu-item" id="menuTutorial">❓ Revoir le tutoriel</button>
               <button class="menu-item" id="menuExport">⇩ Exporter en CSV</button>
+              <button class="menu-item" id="menuUpdate">🔄 Rechercher une mise à jour</button>
             </div>
             <p class="app-version">Version ${APP_VERSION}</p>
           </div>
@@ -838,6 +839,11 @@ const PHOTOS_COL = 'photos';
     });
     $('#menuTutorial').addEventListener('click', ()=>{ closeModal(); openTutorial(false); });
     $('#menuExport').addEventListener('click', ()=>{ closeModal(); exportCSV(); });
+    $('#menuUpdate').addEventListener('click', ()=>{
+      closeModal();
+      showToast('Recherche d\u2019une mise à jour…');
+      checkForAppUpdate(true);
+    });
   }
 
   const TUTORIAL_STEPS = [
@@ -1569,28 +1575,62 @@ const PHOTOS_COL = 'photos';
   }
 
   let updateReloading = false;
-  async function checkForAppUpdate(){
+  async function checkForAppUpdate(manual){
     if(updateReloading) return;
     try{
       const res = await fetch('index.html?v=' + Date.now(), { cache: 'no-store' });
-      if(!res.ok) return;
+      if(!res.ok){
+        if(manual) showToast('Vérification impossible (erreur ' + res.status + ')');
+        return;
+      }
       const text = await res.text();
       const m = text.match(/APP_VERSION\s*=\s*'([^']+)'/);
-      if(m && m[1] !== APP_VERSION){
-        updateReloading = true;
-        location.reload();
+      if(!m){
+        if(manual) showToast('Version en ligne introuvable');
+        return;
       }
-    }catch(e){ /* hors ligne ou indisponible : on réessaiera plus tard */ }
+      if(m[1] === APP_VERSION){
+        if(manual) showToast('Vous avez déjà la dernière version (' + APP_VERSION + ')');
+        return;
+      }
+
+      if(manual){
+        showToast('Mise à jour vers ' + m[1] + '…');
+        updateReloading = true;
+        setTimeout(()=> location.reload(), 600);
+        return;
+      }
+
+      // Sécurité : on ne recharge automatiquement qu'une seule fois par version.
+      // Sans cela, un cache récalcitrant provoquerait des rechargements en boucle.
+      let alreadyTried = null;
+      try{ alreadyTried = sessionStorage.getItem('anomalies_update_try'); }catch(e){}
+      if(alreadyTried === m[1]){
+        showToast('Nouvelle version disponible — toucher pour l\u2019installer', 8000, ()=>{
+          location.reload();
+        });
+        return;
+      }
+      try{ sessionStorage.setItem('anomalies_update_try', m[1]); }catch(e){}
+      updateReloading = true;
+      location.reload();
+    }catch(e){
+      if(manual) showToast('Vérification impossible — vérifiez votre connexion');
+    }
   }
 
   function setupAutoUpdate(){
     // Vérification active : compare la version chargée à celle publiée en ligne.
     // C'est ce qui garantit la mise à jour même quand le téléphone réaffiche
     // l'application depuis sa mémoire sans recharger la page.
-    setTimeout(checkForAppUpdate, 1500);
+    setTimeout(()=> checkForAppUpdate(false), 1500);
     document.addEventListener('visibilitychange', ()=>{
-      if(document.visibilityState === 'visible') checkForAppUpdate();
+      if(document.visibilityState === 'visible') checkForAppUpdate(false);
     });
+    // Filet de sécurité : certains appareils ne signalent pas le retour au premier plan.
+    setInterval(()=>{
+      if(document.visibilityState === 'visible') checkForAppUpdate(false);
+    }, 60000);
 
     if(!('serviceWorker' in navigator)) return;
     navigator.serviceWorker.addEventListener('controllerchange', ()=>{
