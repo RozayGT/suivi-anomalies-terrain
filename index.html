@@ -1443,7 +1443,12 @@ const PHOTOS_COL = 'photos';
     window.addEventListener('offline', ()=> updateSyncStatus(true, false));
     window.addEventListener('online', ()=> updateSyncStatus(false, false));
     document.addEventListener('visibilitychange', ()=>{
-      if(document.visibilityState === 'hidden') updateLastSeen();
+      if(document.visibilityState === 'hidden'){
+        // Réarme la vérification : la prochaine donnée reçue (après un retour au
+        // premier plan, même sans rechargement complet de la page) sera traitée
+        // comme une "nouvelle ouverture" et déclenchera le résumé si besoin.
+        firstSnapshotHandled = false;
+      }
     });
     window.addEventListener('pagehide', updateLastSeen);
 
