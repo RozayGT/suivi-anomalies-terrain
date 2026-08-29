@@ -833,7 +833,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '2.4';
+  const APP_VERSION = '2.5';
   const MAX_PHOTOS = 4;
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
@@ -885,12 +885,18 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     const v = (voie||'').trim().toLowerCase();
     const e = (equipement||'').trim().toLowerCase();
     if(!v || !e) return null;
-    return anomalies.find(a=>
+    // On regarde toutes les anomalies encore à l'accueil (donc hors historique) :
+    // une anomalie traitée tout récemment sur le même équipement mérite aussi
+    // d'être signalée, cela peut indiquer un problème qui revient.
+    const matches = anomalies.filter(a=>
       a.category===catId &&
-      a.statut!=='Traité' &&
+      !isArchived(a) &&
       (a.voie||'').trim().toLowerCase()===v &&
       (a.equipement||'').trim().toLowerCase()===e
-    ) || null;
+    );
+    if(!matches.length) return null;
+    // Une anomalie encore ouverte est plus pertinente à signaler qu'une traitée.
+    return matches.find(a => a.statut !== 'Traité') || matches[0];
   }
 
   // ---------------- Rendering ----------------
@@ -1607,10 +1613,10 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       if(!editing){
         const dup = findPotentialDuplicate(catId, $('#f_voie').value, $('#f_equip').value);
         if(dup){
-          const proceed = await confirmDialog(
-            `Une anomalie similaire existe déjà : ${dup.identifiant} (${dup.statut}). Créer quand même ?`,
-            'Créer quand même', 'primary'
-          );
+          const dupMsg = dup.statut === 'Traité'
+            ? `${dup.identifiant} a déjà été traitée sur cette voie et cet équipement. S'agit-il d'un problème qui revient ?`
+            : `Une anomalie similaire est déjà ouverte : ${dup.identifiant} (${dup.statut}). Créer quand même ?`;
+          const proceed = await confirmDialog(dupMsg, 'Créer quand même', 'primary');
           if(!proceed){
             clearTimeout(unblockTimer);
             isSubmitting = false;
