@@ -421,6 +421,21 @@
   <div class="toast" id="toast" hidden></div>
 </div>
 
+<script>
+  // Si l'application n'a pas démarré au bout de 12 s, on l'indique clairement
+  // plutôt que de laisser un écran de chargement sans fin.
+  window.__appStarted = false;
+  setTimeout(function(){
+    if(window.__appStarted) return;
+    var el = document.getElementById('categoryList');
+    if(!el) return;
+    el.innerHTML = '<div class="empty-state"><div class="big">⚠️</div>'
+      + '<div>L\'application n\'a pas pu démarrer.</div>'
+      + '<div style="margin-top:8px;font-size:13px;">Reconnectez-vous à internet et rouvrez l\'application : '
+      + 'les éléments nécessaires seront alors enregistrés pour un usage hors ligne.</div></div>';
+  }, 12000);
+</script>
+
 <script type="module">
 // ==================================================================
 // CONFIGURATION FIREBASE — remplacez les valeurs ci-dessous par
@@ -592,21 +607,47 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     try{ localStorage.setItem('anomalies_tutorial_seen', 'true'); }catch(e){ /* ignore */ }
   }
 
-  async function saveAnomalyDoc(item){
-    try{ await setDoc(doc(db, ANOMALIES_COL, item.id), item); return true; }
-    catch(e){ console.error(e); return false; }
+  // Hors connexion, Firestore enregistre localement immédiatement mais ne confirme
+  // qu'au retour du réseau. On ne bloque donc pas l'utilisateur sur cette confirmation :
+  // au-delà d'un court délai, l'écriture est considérée comme prise en compte.
+  function writeWithoutWaitingServer(promise, timeoutMs){
+    return new Promise((resolve)=>{
+      let settled = false;
+      const timer = setTimeout(()=>{
+        if(!settled){ settled = true; resolve(true); }
+      }, timeoutMs || 1200);
+      promise.then(()=>{
+        if(!settled){ settled = true; clearTimeout(timer); resolve(true); }
+      }).catch((e)=>{
+        console.error(e);
+        if(!settled){ settled = true; clearTimeout(timer); resolve(false); }
+      });
+    });
   }
-  async function deleteAnomalyDoc(id){
-    try{ await deleteDoc(doc(db, ANOMALIES_COL, id)); }catch(e){ console.error(e); }
+
+  function saveAnomalyDoc(item){
+    try{ return writeWithoutWaitingServer(setDoc(doc(db, ANOMALIES_COL, item.id), item)); }
+    catch(e){ console.error(e); return Promise.resolve(false); }
   }
-  async function savePhotoDoc(id, dataUrl){
-    try{ await setDoc(doc(db, PHOTOS_COL, id), {data: dataUrl}); return true; }
-    catch(e){ console.error(e); return false; }
+  function deleteAnomalyDoc(id){
+    try{ return writeWithoutWaitingServer(deleteDoc(doc(db, ANOMALIES_COL, id))); }
+    catch(e){ console.error(e); return Promise.resolve(false); }
   }
-  async function deletePhotoDoc(id){
-    try{ await deleteDoc(doc(db, PHOTOS_COL, id)); }catch(e){ /* ignore */ }
+  function savePhotoDoc(id, dataUrl){
+    try{ return writeWithoutWaitingServer(setDoc(doc(db, PHOTOS_COL, id), {data: dataUrl}), 2500); }
+    catch(e){ console.error(e); return Promise.resolve(false); }
+  }
+  function deletePhotoDoc(id){
+    try{ return writeWithoutWaitingServer(deleteDoc(doc(db, PHOTOS_COL, id))); }
+    catch(e){ return Promise.resolve(false); }
   }
   async function getPhotoDoc(id){
+    // Hors connexion, on lit directement la copie locale pour éviter toute attente.
+    try{
+      const cached = await getDocFromCache(doc(db, PHOTOS_COL, id));
+      if(cached.exists()) return cached.data().data || null;
+    }catch(e){ /* pas encore en cache : on tente le réseau ci-dessous */ }
+    if(!navigator.onLine) return null;
     try{
       const snap = await getDoc(doc(db, PHOTOS_COL, id));
       return snap.exists() ? (snap.data().data || null) : null;
@@ -731,7 +772,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }catch(e){ /* sans effet sur l'enregistrement */ }
   }
 
-  const APP_VERSION = '1.7';
+  const APP_VERSION = '1.9';
   const MAX_PHOTOS = 4;
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
@@ -1459,6 +1500,14 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       isSubmitting = true;
       const submitBtn = $('#submitBtn');
       if(submitBtn){ submitBtn.disabled = true; submitBtn.textContent = 'Enregistrement…'; }
+      // Filet de sécurité : le bouton ne doit jamais rester bloqué indéfiniment.
+      const unblockTimer = setTimeout(()=>{
+        if(submitBtn && submitBtn.isConnected){
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Enregistrer';
+          isSubmitting = false;
+        }
+      }, 8000);
 
       if(!editing){
         const dup = findPotentialDuplicate(catId, $('#f_voie').value, $('#f_equip').value);
@@ -1468,6 +1517,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
             'Créer quand même', 'primary'
           );
           if(!proceed){
+            clearTimeout(unblockTimer);
             isSubmitting = false;
             if(submitBtn){ submitBtn.disabled = false; submitBtn.textContent = 'Enregistrer'; }
             return;
@@ -1527,12 +1577,15 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
         };
       }
       const ok = await saveAnomalyDoc(finalItem);
+      clearTimeout(unblockTimer);
       if(ok) haptic(18);
       // Prévenir les collègues, uniquement pour une nouvelle anomalie.
       if(ok && !editing) triggerPushNotification();
       expanded.add(catId);
       closeModal();
-      showToast(ok ? 'Anomalie enregistrée' : "Échec de l'enregistrement — réessayez");
+      showToast(ok
+        ? (navigator.onLine ? 'Anomalie enregistrée' : 'Enregistrée — sera synchronisée au retour du réseau')
+        : "Échec de l'enregistrement — réessayez");
     });
   }
 
@@ -1939,6 +1992,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   }
 
   function init(){
+    window.__appStarted = true;
     wireStaticEvents();
     loadProfile();
     render();

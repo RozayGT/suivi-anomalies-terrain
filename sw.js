@@ -22,9 +22,45 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
-  // Laisse passer sans interférer tout ce qui ne vient pas du site lui-même
-  // (Firebase, polices Google, etc.) : ces requêtes gèrent déjà leur propre cache.
-  if (url.origin !== self.location.origin) return;
+
+  // --- Ressources externes ---
+  if (url.origin !== self.location.origin) {
+    // Les échanges de données Firestore ne doivent jamais être mis en cache :
+    // ils gèrent déjà leur propre stockage local.
+    if (url.hostname.endsWith('googleapis.com') && url.hostname.startsWith('firestore')) return;
+
+    // Composants Firebase et polices : indispensables au démarrage de
+    // l'application. On les conserve localement pour un fonctionnement hors ligne.
+    const cacheable =
+      url.hostname === 'www.gstatic.com' ||
+      url.hostname === 'fonts.googleapis.com' ||
+      url.hostname === 'fonts.gstatic.com';
+    if (!cacheable) return;
+
+    event.respondWith((async () => {
+      const cached = await caches.match(req);
+      if (cached) {
+        // Rafraîchissement discret en arrière-plan quand le réseau est disponible.
+        event.waitUntil((async () => {
+          try {
+            const fresh = await fetch(req);
+            if (fresh && fresh.ok && fresh.type !== 'opaque') {
+              const cache = await caches.open(CACHE_NAME);
+              await cache.put(req, fresh.clone());
+            }
+          } catch (e) { /* hors ligne : on garde la copie existante */ }
+        })());
+        return cached;
+      }
+      const fresh = await fetch(req);
+      if (fresh && fresh.ok && fresh.type !== 'opaque') {
+        const cache = await caches.open(CACHE_NAME);
+        cache.put(req, fresh.clone());
+      }
+      return fresh;
+    })());
+    return;
+  }
 
   // Requête de vérification de version : toujours directement au réseau, jamais mise en cache.
   if (url.searchParams.has('v')) return;
