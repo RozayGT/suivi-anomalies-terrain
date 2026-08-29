@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Suivi Anomalies Terrain</title>
 
 <!-- Icône d'app / installation écran d'accueil -->
@@ -293,6 +296,10 @@
     text-align:left; color:var(--text); font-size:14.5px; cursor:pointer;
   }
   .menu-item:active{background:var(--panel-2);}
+  .app-version{
+    text-align:center; font-size:11.5px; color:var(--text-faint);
+    font-family:'IBM Plex Mono',monospace; margin:16px 0 0;
+  }
 
   .toast{
     position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
@@ -455,6 +462,7 @@ const PHOTOS_COL = 'photos';
   const STATUTS = ['Non traité','En cours','Traité'];
   const PRIORITES = ['Faible','Moyenne','Élevée'];
   const FILTER_MAP = {'non-traite':'Non traité','en-cours':'En cours','traite':'Traité'};
+  const newBatchIds = new Set();
 
   let anomalies = [];
   let profile = {name:''};
@@ -589,6 +597,7 @@ const PHOTOS_COL = 'photos';
     }catch(e){ return null; }
   }
 
+  const APP_VERSION = '2026.08.29';
   const MAX_PHOTOS = 4;
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
@@ -662,6 +671,8 @@ const PHOTOS_COL = 'photos';
       const name = profile.name;
       if(!name) return false;
       if(a.createdBy!==name && a.updatedBy!==name && a.traitePar!==name) return false;
+    }else if(activeFilter==='new'){
+      if(!newBatchIds.has(a.id)) return false;
     }else if(activeFilter!=='all' && a.statut!==FILTER_MAP[activeFilter]) return false;
     if(searchTerm){
       const q = searchTerm.toLowerCase();
@@ -685,6 +696,9 @@ const PHOTOS_COL = 'photos';
   function renderChips(){
     const wrap = $('#filterChips');
     const defs = [['all','Toutes'],['non-traite','Non traité'],['en-cours','En cours'],['traite','Traité'],['mine','Les miennes']];
+    if(newBatchIds.size > 0){
+      defs.push(['new', `🆕 Nouvelles (${newBatchIds.size})`]);
+    }
     wrap.innerHTML = defs.map(([k,label])=>
       `<button class="chip" data-filter="${k}" data-active="${activeFilter===k}">${label}</button>`
     ).join('');
@@ -807,6 +821,7 @@ const PHOTOS_COL = 'photos';
               <button class="menu-item" id="menuTutorial">❓ Revoir le tutoriel</button>
               <button class="menu-item" id="menuExport">⇩ Exporter en CSV</button>
             </div>
+            <p class="app-version">Version ${APP_VERSION}</p>
           </div>
         </div>
       </div>
@@ -1431,15 +1446,16 @@ const PHOTOS_COL = 'photos';
     if(items.length === 1){
       openForm(items[0].category, items[0].id);
     }else{
-      items.forEach(a => expanded.add(a.category));
+      activeFilter = 'new';
       render();
-      setTimeout(()=>{
-        const catEl = document.querySelector(`.category[data-cat="${items[0].category}"]`);
-        if(catEl) catEl.scrollIntoView({behavior:'smooth', block:'start'});
-      }, 50);
     }
   }
   function checkForNewAnomalies(list){
+    // Ne rien consommer tant que l'app n'est pas réellement à l'écran : sinon les
+    // anomalies reçues en arrière-plan seraient marquées "déjà vues" et l'utilisateur
+    // ne verrait aucune notification à sa prochaine ouverture.
+    if(document.visibilityState !== 'visible') return;
+
     const previous = getLastSeen();
     if(!previous){
       updateLastSeen();
@@ -1451,11 +1467,12 @@ const PHOTOS_COL = 'photos';
       !notifiedAnomalyIds.has(a.id)
     );
     if(newOnes.length > 0){
-      newOnes.forEach(a => notifiedAnomalyIds.add(a.id));
+      newOnes.forEach(a => { notifiedAnomalyIds.add(a.id); newBatchIds.add(a.id); });
       const count = newOnes.length;
       const msg = count === 1
         ? '📋 1 nouvelle anomalie depuis votre dernière visite — toucher pour l\u2019ouvrir'
         : `📋 ${count} nouvelles anomalies depuis votre dernière visite — toucher pour les voir`;
+      renderChips();
       showToast(msg, 5000, ()=> goToNewAnomalies(newOnes));
     }
     updateLastSeen();
@@ -1465,6 +1482,12 @@ const PHOTOS_COL = 'photos';
     if(!navigator.onLine) updateSyncStatus(true, false);
     window.addEventListener('offline', ()=> updateSyncStatus(true, false));
     window.addEventListener('online', ()=> updateSyncStatus(false, false));
+    document.addEventListener('visibilitychange', ()=>{
+      if(document.visibilityState === 'visible'){
+        // Retour au premier plan : on évalue maintenant ce qui est arrivé pendant l'absence.
+        setTimeout(()=> checkForNewAnomalies(anomalies), 150);
+      }
+    });
 
     onSnapshot(collection(db, ANOMALIES_COL), { includeMetadataChanges: true }, (snapshot)=>{
       anomalies = snapshot.docs.map(d=> ({ id: d.id, ...d.data() }));
@@ -1492,6 +1515,10 @@ const PHOTOS_COL = 'photos';
         showToast('Indiquez votre nom pour utiliser ce filtre');
         openProfileModal();
         return;
+      }
+      // Les nouveautés ont été consultées : on retire le filtre temporaire
+      if(activeFilter === 'new' && chip.dataset.filter !== 'new'){
+        newBatchIds.clear();
       }
       activeFilter = chip.dataset.filter;
       render();
