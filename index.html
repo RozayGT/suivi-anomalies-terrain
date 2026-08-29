@@ -597,7 +597,7 @@ const PHOTOS_COL = 'photos';
     }catch(e){ return null; }
   }
 
-  const APP_VERSION = '2026.08.29-c';
+  const APP_VERSION = '2026.08.29-d';
   const MAX_PHOTOS = 4;
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
@@ -777,6 +777,10 @@ const PHOTOS_COL = 'photos';
     modalOpen = false;
     unlockBodyScroll();
     $('#modalRoot').innerHTML = '';
+    // Les mises à jour reçues pendant que la fiche était ouverte n'ont pas été
+    // appliquées à l'écran (pour ne pas faire bouger la liste sous les doigts) :
+    // on rafraîchit maintenant.
+    render();
   }
 
   function openCategoryPicker(){
