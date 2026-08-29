@@ -348,12 +348,29 @@
   .lightbox-dots .dot{width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.35);}
   .lightbox-dots .dot.active{background:#fff;}
 
-  .tuto-icon{font-size:54px; text-align:center; margin:10px 0 16px; line-height:1;}
-  .tuto-title{text-align:center; margin-bottom:10px;}
-  .tuto-text{font-size:14.5px; line-height:1.6; color:var(--text); text-align:center; margin:0 2px 20px;}
-  .tuto-dots{display:flex; justify-content:center; gap:6px; margin-bottom:6px;}
-  .tuto-dots .dot{width:7px; height:7px; border-radius:50%; background:var(--line);}
-  .tuto-dots .dot.active{background:var(--accent);}
+  .tuto-icon{font-size:52px; text-align:center; margin:6px 0 14px; line-height:1;}
+  .tuto-title{text-align:center; margin-bottom:6px;}
+  .tuto-step-count{
+    text-align:center; font-size:11.5px; color:var(--text-faint); margin:0 0 16px;
+    font-family:'IBM Plex Mono',monospace; letter-spacing:0.04em;
+  }
+  .tuto-text{
+    font-size:14.5px; line-height:1.65; color:var(--text); text-align:center;
+    margin:0 2px 22px; white-space:pre-line;
+  }
+  .tuto-dots{display:flex; justify-content:center; gap:4px; margin-bottom:2px;}
+  .tuto-dots .dot{
+    width:22px; height:22px; border-radius:50%; cursor:pointer; position:relative;
+  }
+  .tuto-dots .dot::after{
+    content:''; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:7px; height:7px; border-radius:50%; background:var(--line);
+  }
+  .tuto-dots .dot.active::after{background:var(--accent); width:9px; height:9px;}
+  @keyframes tutoSlideLeft{ from{opacity:0; transform:translateX(26px);} to{opacity:1; transform:none;} }
+  @keyframes tutoSlideRight{ from{opacity:0; transform:translateX(-26px);} to{opacity:1; transform:none;} }
+  .tuto-slide.slide-left{animation:tutoSlideLeft 0.22s ease-out;}
+  .tuto-slide.slide-right{animation:tutoSlideRight 0.22s ease-out;}
 
   .confirm-overlay{align-items:center; z-index:100;}
   .confirm-card{
@@ -810,7 +827,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '2.2';
+  const APP_VERSION = '2.3';
   const MAX_PHOTOS = 4;
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
@@ -1134,59 +1151,54 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
 
   const TUTORIAL_STEPS = [
     {
-      icon: '🚉',
-      title: 'Bienvenue sur Suivi Anomalies',
-      text: "Cette application permet à toute l'équipe de signaler et suivre les anomalies terrain, avec mise à jour en temps réel pour tout le monde. Ce guide vous montre l'essentiel en quelques étapes — vous pourrez le revoir à tout moment depuis le menu ⋮."
+      icon: '\u{1F689}',
+      title: 'Bienvenue',
+      text: "Cette application permet \u00e0 toute l'\u00e9quipe de signaler et suivre les anomalies terrain. Tout est partag\u00e9 en temps r\u00e9el : ce que vous saisissez appara\u00eet imm\u00e9diatement chez vos coll\u00e8gues.\n\nCe guide fait le tour de l'essentiel en quelques \u00e9crans. Glissez vers la gauche pour avancer."
     },
     {
-      icon: '📋',
-      title: 'Anomalies par catégorie',
-      text: "Les anomalies sont classées par type d'équipement (Perçage/Insert, Aiguille, Signaux…). Touchez une catégorie pour la déplier et voir la liste de ses anomalies, avec le nombre de \"Non traité\" / \"En cours\" / \"Traité\" affiché à côté de son nom."
+      icon: '\u{1F4CB}',
+      title: "L'\u00e9cran d'accueil",
+      text: "Les anomalies sont regroup\u00e9es par type d'\u00e9quipement : Per\u00e7age/Insert, Aiguille, Signaux\u2026\n\nTouchez une cat\u00e9gorie pour la d\u00e9plier. Les trois chiffres \u00e0 c\u00f4t\u00e9 de son nom indiquent, dans l'ordre, le nombre d'anomalies non trait\u00e9es (rouge), en cours (orange) et trait\u00e9es (vert)."
     },
     {
-      icon: '➕',
-      title: 'Ajouter une anomalie',
-      text: "Appuyez sur le bouton + en bas de l'écran (ou sur \"+ Ajouter\" dans une catégorie dépliée), choisissez la catégorie concernée si besoin, puis remplissez la fiche : voie, PK, équipement, description, priorité…"
+      icon: '\u2795',
+      title: 'Cr\u00e9er une anomalie',
+      text: "Appuyez sur le bouton + en bas \u00e0 droite, choisissez la cat\u00e9gorie, puis remplissez la fiche : voie, PK, \u00e9quipement, description et priorit\u00e9.\n\nSi une anomalie non trait\u00e9e existe d\u00e9j\u00e0 sur la m\u00eame voie et le m\u00eame \u00e9quipement, l'application vous pr\u00e9vient avant d'enregistrer, pour \u00e9viter les doublons."
     },
     {
-      icon: '📷',
-      title: 'Photos',
-      text: "Ajoutez jusqu'à 4 photos par anomalie, directement depuis l'appareil photo ou la galerie. Touchez une photo pour l'agrandir : pincez ou double-tapez pour zoomer, glissez à gauche/droite pour passer à la suivante."
+      icon: '\u{1F4F7}',
+      title: 'Joindre des photos',
+      text: "Jusqu'\u00e0 4 photos par anomalie, prises sur le moment ou choisies dans la galerie. Elles sont compress\u00e9es automatiquement.\n\nTouchez une photo pour l'agrandir : pincez ou double-tapez pour zoomer, glissez pour passer \u00e0 la suivante."
     },
     {
-      icon: '⟳',
-      title: 'Changer le statut en un tap',
-      text: "Sur chaque carte de la liste, touchez la pastille de statut (rouge/orange/vert) pour la faire avancer directement : Non traité → En cours → Traité, sans avoir besoin d'ouvrir toute la fiche."
+      icon: '\u26A1',
+      title: 'Faire avancer le traitement',
+      text: "Sur chaque carte, touchez la pastille de statut pour la faire avancer sans ouvrir la fiche : Non trait\u00e9 \u2192 En cours \u2192 Trait\u00e9.\n\nAu passage en \u00ab Trait\u00e9 \u00bb, la date du jour et votre nom se remplissent tout seuls."
     },
     {
-      icon: '🔍',
+      icon: '\u{1F50D}',
       title: 'Retrouver une anomalie',
-      text: "Utilisez la barre de recherche ou les filtres (Non traité, En cours, Traité, Les miennes) en haut de l'écran pour retrouver rapidement ce que vous cherchez, par voie, équipement ou description."
+      text: "La barre de recherche fouille dans la voie, le PK, l'\u00e9quipement et la description.\n\nLes filtres juste au-dessus permettent de n'afficher qu'un statut donn\u00e9, ou \u00ab Les miennes \u00bb pour ne voir que ce que vous avez cr\u00e9\u00e9 ou trait\u00e9."
     },
     {
-      icon: '📶',
-      title: 'Fonctionne hors connexion',
-      text: "Pas de réseau ? Vous pouvez quand même consulter vos anomalies, leurs photos, et en créer de nouvelles. Restez simplement sur l'application jusqu'à voir le message \"Anomalie enregistrée\" avant de la fermer, le temps que la sauvegarde soit bien prise en compte sur votre appareil. Dès que la connexion revient, tout se synchronise automatiquement avec le reste de l'équipe — le point en haut de l'écran passe au vert une fois à jour."
+      icon: '\u{1F5C2}',
+      title: "L'historique",
+      text: "Pour garder un accueil lisible, les anomalies trait\u00e9es sont archiv\u00e9es automatiquement 24 h apr\u00e8s leur traitement. Vous pouvez aussi les archiver tout de suite depuis leur fiche.\n\nLe bouton \u{1F5C2} en haut de l'\u00e9cran donne acc\u00e8s \u00e0 l'historique complet, et permet de ressortir une anomalie si besoin."
     },
     {
-      icon: '📋',
-      title: 'Prévenu des nouveautés',
-      text: "L'application vous signale les anomalies ajoutées par vos collègues depuis votre dernière visite, avec un message du type \"3 nouvelles anomalies depuis votre dernière visite\". Pratique pour ne rien manquer sans tout reparcourir. Cette information reste propre à votre téléphone, elle n'est pas partagée avec les autres."
+      icon: '\u{1F514}',
+      title: '\u00cAtre pr\u00e9venu',
+      text: "\u00c0 l'ouverture, un message vous indique les anomalies ajout\u00e9es par vos coll\u00e8gues depuis votre derni\u00e8re visite. Touchez-le pour les afficher directement.\n\nPour aller plus loin, activez les notifications depuis le menu \u22ee : vous serez alors averti sur votre t\u00e9l\u00e9phone m\u00eame application ferm\u00e9e. \u00c0 faire une fois sur chaque t\u00e9l\u00e9phone."
     },
     {
-      icon: '🔔',
-      title: 'Notifications',
-      text: "Activez les notifications depuis le menu ⋮ pour être prévenu sur votre téléphone dès qu'un collègue ajoute une anomalie, même application fermée. Chaque personne doit l'activer sur son propre téléphone. Sur iPhone, cela nécessite d'avoir ajouté l'application à l'écran d'accueil."
+      icon: '\u{1F4F6}',
+      title: 'Sans r\u00e9seau',
+      text: "Sur le terrain sans couverture, vous pouvez consulter les anomalies, leurs photos, et en cr\u00e9er de nouvelles normalement.\n\nRestez simplement sur l'application jusqu'au message de confirmation avant de la fermer. Tout repart automatiquement d\u00e8s le retour du r\u00e9seau : l'indicateur en haut de l'\u00e9cran passe alors au vert."
     },
     {
-      icon: '🗂️',
-      title: 'Historique',
-      text: "Pour ne pas surcharger l'accueil, les anomalies traitées partent dans l'historique : automatiquement 24 h après leur traitement, ou tout de suite via le bouton \"Envoyer dans l'historique\" présent dans la fiche. Le bouton 🗂️ en haut de l'écran permet de les consulter à tout moment, et de ressortir une anomalie de l'historique si besoin."
-    },
-    {
-      icon: '⚙️',
-      title: "Personnaliser l'application",
-      text: "Dans le menu ⋮ en haut à droite : modifiez votre nom (utilisé pour identifier vos ajouts et vos traitements), basculez entre mode sombre et mode clair, exportez toutes les anomalies en CSV, et revoyez ce tutoriel quand vous le souhaitez."
+      icon: '\u2699\uFE0F',
+      title: 'Le menu',
+      text: "Le bouton \u22ee en haut \u00e0 droite regroupe vos r\u00e9glages : votre nom (celui qui appara\u00eet sur vos ajouts), les notifications, l'export de toutes les anomalies en CSV, le mode clair ou sombre, et ce tutoriel que vous pouvez rouvrir quand vous voulez.\n\nBonne utilisation !"
     },
   ];
 
@@ -1204,19 +1216,22 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       }
     }
 
-    function renderStep(){
+    function renderStep(direction){
       const s = TUTORIAL_STEPS[step];
       $('#modalRoot').innerHTML = `
         <div class="overlay" id="overlayEl">
           <div class="sheet">
             <div class="sheet-handle"></div>
             <button type="button" class="sheet-close" id="tutoCloseX" aria-label="Fermer">✕</button>
-            <div class="sheet-scroll">
-              <div class="tuto-icon">${s.icon}</div>
-              <h2 class="tuto-title">${escapeHtml(s.title)}</h2>
-              <p class="tuto-text">${escapeHtml(s.text)}</p>
+            <div class="sheet-scroll" id="tutoScroll">
+              <div class="tuto-slide${direction ? ' slide-' + direction : ''}">
+                <div class="tuto-icon">${s.icon}</div>
+                <h2 class="tuto-title">${escapeHtml(s.title)}</h2>
+                <p class="tuto-step-count">Étape ${step + 1} sur ${total}</p>
+                <p class="tuto-text">${escapeHtml(s.text)}</p>
+              </div>
               <div class="tuto-dots">
-                ${TUTORIAL_STEPS.map((_, i) => `<span class="dot${i === step ? ' active' : ''}"></span>`).join('')}
+                ${TUTORIAL_STEPS.map((_, i) => `<span class="dot${i === step ? ' active' : ''}" data-step="${i}"></span>`).join('')}
               </div>
             </div>
             <div class="sheet-actions">
@@ -1230,13 +1245,48 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       $('#tutoCloseX').addEventListener('click', finish);
       $('#tutoSkip').addEventListener('click', ()=>{
         if(step === 0) finish();
-        else { step--; renderStep(); }
+        else goToStep(step - 1);
       });
       $('#tutoNext').addEventListener('click', ()=>{
-        if(step < total - 1){ step++; renderStep(); }
+        if(step < total - 1) goToStep(step + 1);
         else finish();
       });
+      // Points de progression cliquables
+      $('#modalRoot').querySelectorAll('.tuto-dots .dot').forEach(d=>{
+        d.addEventListener('click', ()=>{
+          const target = parseInt(d.dataset.step, 10);
+          if(target !== step) goToStep(target);
+        });
+      });
+
+      // Navigation au doigt : glisser vers la gauche/droite change d'étape.
+      const zone = $('#tutoScroll');
+      let startX = 0, startY = 0, tracking = false;
+      zone.addEventListener('touchstart', (e)=>{
+        if(e.touches.length !== 1){ tracking = false; return; }
+        tracking = true;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+      }, {passive:true});
+      zone.addEventListener('touchend', (e)=>{
+        if(!tracking) return;
+        tracking = false;
+        const dx = e.changedTouches[0].clientX - startX;
+        const dy = e.changedTouches[0].clientY - startY;
+        // On ignore les gestes surtout verticaux (défilement du texte).
+        if(Math.abs(dx) < 55 || Math.abs(dy) > Math.abs(dx)) return;
+        if(dx < 0 && step < total - 1) goToStep(step + 1);
+        else if(dx > 0 && step > 0) goToStep(step - 1);
+      });
     }
+
+    function goToStep(next){
+      const dir = next > step ? 'left' : 'right';
+      step = next;
+      haptic(8);
+      renderStep(dir);
+    }
+
     renderStep();
   }
 
