@@ -291,6 +291,12 @@
   .picker-item span.pcode{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-faint); text-transform:none;}
 
   .menu-list{display:flex; flex-direction:column; gap:6px;}
+  .menu-section{margin-bottom:18px;}
+  .menu-section:last-of-type{margin-bottom:6px;}
+  .menu-section-title{
+    font-size:11.5px; color:var(--text-faint); text-transform:uppercase;
+    letter-spacing:0.06em; margin:0 0 7px 3px; font-weight:600;
+  }
   .menu-item{
     background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:13px 14px;
     text-align:left; color:var(--text); font-size:14.5px; cursor:pointer;
@@ -691,7 +697,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }catch(e){ /* sans effet sur l'enregistrement */ }
   }
 
-  const APP_VERSION = '1.5';
+  const APP_VERSION = '1.6';
   const MAX_PHOTOS = 4;
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
@@ -967,13 +973,26 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
           <div class="sheet-scroll">
             <h2>Menu</h2>
             <p class="sheet-sub">${profile.name ? 'Connecté en tant que '+escapeHtml(profile.name) : 'Aucun nom enregistré'}</p>
-            <div class="menu-list">
-              <button class="menu-item" id="menuProfile">✎ Modifier mon nom</button>
-              <button class="menu-item" id="menuTheme">${themeLabel}</button>
-              <button class="menu-item" id="menuTutorial">❓ Revoir le tutoriel</button>
-              <button class="menu-item" id="menuExport">⇩ Exporter en CSV</button>
-              <button class="menu-item" id="menuNotif">${notificationsEnabled() ? '🔕 Désactiver les notifications' : '🔔 Activer les notifications'}</button>
-              <button class="menu-item" id="menuUpdate">🔄 Rechercher une mise à jour</button>
+            <div class="menu-section">
+              <p class="menu-section-title">Mon profil</p>
+              <div class="menu-list">
+                <button class="menu-item" id="menuProfile">✎ Modifier mon nom</button>
+                <button class="menu-item" id="menuNotif">${notificationsEnabled() ? '🔕 Désactiver les notifications' : '🔔 Activer les notifications'}</button>
+              </div>
+            </div>
+            <div class="menu-section">
+              <p class="menu-section-title">Données</p>
+              <div class="menu-list">
+                <button class="menu-item" id="menuExport">⇩ Exporter en CSV</button>
+              </div>
+            </div>
+            <div class="menu-section">
+              <p class="menu-section-title">Application</p>
+              <div class="menu-list">
+                <button class="menu-item" id="menuTheme">${themeLabel}</button>
+                <button class="menu-item" id="menuTutorial">❓ Revoir le tutoriel</button>
+                <button class="menu-item" id="menuUpdate">🔄 Rechercher une mise à jour</button>
+              </div>
             </div>
             <p class="app-version">Version ${APP_VERSION}</p>
           </div>
