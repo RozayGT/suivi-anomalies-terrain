@@ -443,6 +443,14 @@ const db = initializeFirestore(fbApp, {
 });
 const ANOMALIES_COL = 'anomalies';
 const PHOTOS_COL = 'photos';
+const PUSHSUBS_COL = 'pushSubs';
+
+// ---- Notifications ----
+// Clé publique VAPID de l'application (peut être publique sans risque).
+const VAPID_PUBLIC_KEY = 'BNa8N7Zl_VLH6fU9V6_61DuMswADQzJbnYFH9mUYN3Yrb_LiIwuj_tXOxd7Y_yfTLz2mn9sCU6IEd2a6oFh1oy4';
+// À REMPLACER par l'adresse de votre Worker Cloudflare, par exemple :
+// https://anomalies-push.votre-compte.workers.dev
+const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
 
 (function(){
   "use strict";
@@ -599,7 +607,91 @@ const PHOTOS_COL = 'photos';
     }catch(e){ return null; }
   }
 
-  const APP_VERSION = '1.4';
+  // ---------------- Notifications push ----------------
+  function pushSupported(){
+    return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  }
+  function urlBase64ToUint8Array(base64String){
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(base64);
+    const out = new Uint8Array(raw.length);
+    for(let i=0;i<raw.length;i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  function subKeyId(endpoint){
+    // Identifiant stable et court dérivé de l'adresse d'abonnement.
+    let h = 0;
+    for(let i=0;i<endpoint.length;i++){ h = (h*31 + endpoint.charCodeAt(i)) | 0; }
+    return 'sub' + Math.abs(h).toString(36) + '_' + endpoint.slice(-12).replace(/[^a-zA-Z0-9]/g,'');
+  }
+  function notificationsEnabled(){
+    try{ return localStorage.getItem('anomalies_push') === 'on'; }catch(e){ return false; }
+  }
+  async function enableNotifications(){
+    if(!pushSupported()){
+      showToast("Notifications non disponibles sur cet appareil");
+      return false;
+    }
+    if(PUSH_ENDPOINT.startsWith('REMPLACER')){
+      showToast("Service de notifications non configuré");
+      return false;
+    }
+    try{
+      const perm = await Notification.requestPermission();
+      if(perm !== 'granted'){
+        showToast("Notifications refusées — vous pouvez les autoriser dans les réglages");
+        return false;
+      }
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if(!sub){
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+      }
+      const json = sub.toJSON();
+      await setDoc(doc(db, PUSHSUBS_COL, subKeyId(json.endpoint)), {
+        endpoint: json.endpoint,
+        owner: profile.name || '',
+        createdAt: new Date().toISOString(),
+      });
+      try{ localStorage.setItem('anomalies_push', 'on'); }catch(e){}
+      showToast('Notifications activées ✓');
+      return true;
+    }catch(e){
+      console.error(e);
+      showToast("Activation impossible — réessayez");
+      return false;
+    }
+  }
+  async function disableNotifications(){
+    try{
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if(sub){
+        const json = sub.toJSON();
+        try{ await deleteDoc(doc(db, PUSHSUBS_COL, subKeyId(json.endpoint))); }catch(e){}
+        await sub.unsubscribe();
+      }
+    }catch(e){ /* ignore */ }
+    try{ localStorage.setItem('anomalies_push', 'off'); }catch(e){}
+    showToast('Notifications désactivées');
+  }
+  // Prévient les autres appareils qu'une anomalie vient d'être créée.
+  function triggerPushNotification(){
+    if(PUSH_ENDPOINT.startsWith('REMPLACER')) return;
+    try{
+      fetch(PUSH_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author: profile.name || '' }),
+      }).catch(()=>{});
+    }catch(e){ /* sans effet sur l'enregistrement */ }
+  }
+
+  const APP_VERSION = '1.5';
   const MAX_PHOTOS = 4;
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
@@ -880,6 +972,7 @@ const PHOTOS_COL = 'photos';
               <button class="menu-item" id="menuTheme">${themeLabel}</button>
               <button class="menu-item" id="menuTutorial">❓ Revoir le tutoriel</button>
               <button class="menu-item" id="menuExport">⇩ Exporter en CSV</button>
+              <button class="menu-item" id="menuNotif">${notificationsEnabled() ? '🔕 Désactiver les notifications' : '🔔 Activer les notifications'}</button>
               <button class="menu-item" id="menuUpdate">🔄 Rechercher une mise à jour</button>
             </div>
             <p class="app-version">Version ${APP_VERSION}</p>
@@ -895,6 +988,11 @@ const PHOTOS_COL = 'photos';
     });
     $('#menuTutorial').addEventListener('click', ()=>{ closeModal(); openTutorial(false); });
     $('#menuExport').addEventListener('click', ()=>{ closeModal(); exportCSV(); });
+    $('#menuNotif').addEventListener('click', async ()=>{
+      closeModal();
+      if(notificationsEnabled()) await disableNotifications();
+      else await enableNotifications();
+    });
     $('#menuUpdate').addEventListener('click', ()=>{
       closeModal();
       showToast('Recherche d\u2019une mise à jour…');
@@ -942,6 +1040,11 @@ const PHOTOS_COL = 'photos';
       icon: '📋',
       title: 'Prévenu des nouveautés',
       text: "L'application vous signale les anomalies ajoutées par vos collègues depuis votre dernière visite, avec un message du type \"3 nouvelles anomalies depuis votre dernière visite\". Pratique pour ne rien manquer sans tout reparcourir. Cette information reste propre à votre téléphone, elle n'est pas partagée avec les autres."
+    },
+    {
+      icon: '🔔',
+      title: 'Notifications',
+      text: "Activez les notifications depuis le menu ⋮ pour être prévenu sur votre téléphone dès qu'un collègue ajoute une anomalie, même application fermée. Chaque personne doit l'activer sur son propre téléphone. Sur iPhone, cela nécessite d'avoir ajouté l'application à l'écran d'accueil."
     },
     {
       icon: '🗂️',
@@ -1366,6 +1469,8 @@ const PHOTOS_COL = 'photos';
       }
       const ok = await saveAnomalyDoc(finalItem);
       if(ok) haptic(18);
+      // Prévenir les collègues, uniquement pour une nouvelle anomalie.
+      if(ok && !editing) triggerPushNotification();
       expanded.add(catId);
       closeModal();
       showToast(ok ? 'Anomalie enregistrée' : "Échec de l'enregistrement — réessayez");
