@@ -761,18 +761,56 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     showToast('Notifications désactivées');
   }
   // Prévient les autres appareils qu'une anomalie vient d'être créée.
-  function triggerPushNotification(){
-    if(PUSH_ENDPOINT.startsWith('REMPLACER')) return;
-    try{
-      fetch(PUSH_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ author: profile.name || '' }),
-      }).catch(()=>{});
-    }catch(e){ /* sans effet sur l'enregistrement */ }
+  // Sans réseau, la demande est mise en attente et repartira automatiquement.
+  const PENDING_PUSH_KEY = 'anomalies_push_pending';
+
+  function markPushPending(){
+    try{ localStorage.setItem(PENDING_PUSH_KEY, profile.name || ''); }catch(e){}
+  }
+  function clearPushPending(){
+    try{ localStorage.removeItem(PENDING_PUSH_KEY); }catch(e){}
+  }
+  function hasPushPending(){
+    try{ return localStorage.getItem(PENDING_PUSH_KEY) !== null; }catch(e){ return false; }
   }
 
-  const APP_VERSION = '2.1';
+  function sendPushRequest(author){
+    return fetch(PUSH_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ author: author || '' }),
+    });
+  }
+
+  function triggerPushNotification(){
+    if(PUSH_ENDPOINT.startsWith('REMPLACER')) return;
+    if(!navigator.onLine){
+      markPushPending();
+      return;
+    }
+    try{
+      sendPushRequest(profile.name)
+        .then((res)=>{ if(!res.ok) markPushPending(); })
+        .catch(()=>{ markPushPending(); });
+    }catch(e){ markPushPending(); }
+  }
+
+  // Au retour du réseau : on laisse d'abord l'anomalie se synchroniser,
+  // puis on envoie la notification en attente.
+  function flushPendingPush(){
+    if(PUSH_ENDPOINT.startsWith('REMPLACER')) return;
+    if(!hasPushPending() || !navigator.onLine) return;
+    let author = '';
+    try{ author = localStorage.getItem(PENDING_PUSH_KEY) || ''; }catch(e){}
+    setTimeout(()=>{
+      if(!navigator.onLine) return;
+      sendPushRequest(author)
+        .then((res)=>{ if(res.ok) clearPushPending(); })
+        .catch(()=>{ /* on réessaiera à la prochaine occasion */ });
+    }, 5000);
+  }
+
+  const APP_VERSION = '2.2';
   const MAX_PHOTOS = 4;
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
@@ -1826,6 +1864,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     window.addEventListener('online', ()=>{
       updateSyncStatus(false, false);
       setTimeout(prefetchPhotos, 3000);
+      flushPendingPush();
     });
     document.addEventListener('visibilitychange', ()=>{
       if(document.visibilityState === 'hidden'){
@@ -1998,6 +2037,9 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     render();
     startRealtimeSync();
     setupAutoUpdate();
+    // Une anomalie créée hors ligne lors d'une session précédente peut avoir
+    // une notification encore en attente d'envoi.
+    flushPendingPush();
     if(!hasSeenTutorial()){
       setTimeout(()=>{ openTutorial(true); }, 400);
     }else if(!profile.name){
