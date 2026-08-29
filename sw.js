@@ -140,7 +140,7 @@ self.addEventListener('push', (event) => {
       {
         body: (info && info.body) || 'Une anomalie vient d\u2019être ajoutée.',
         icon: 'icon-192.png',
-        badge: 'icon-192.png',
+        badge: 'badge-96.png',
         tag: 'nouvelle-anomalie',
         renotify: true,
         data: { url: './' },
