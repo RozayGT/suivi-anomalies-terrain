@@ -430,7 +430,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
 import {
   initializeFirestore, persistentLocalCache, persistentSingleTabManager,
-  collection, doc, setDoc, deleteDoc, getDoc, onSnapshot
+  collection, doc, setDoc, deleteDoc, getDoc, getDocFromCache, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -613,6 +613,40 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }catch(e){ return null; }
   }
 
+  // ---- Disponibilité des photos hors connexion ----
+  // Les photos déjà ouvertes restent consultables hors ligne. Pour que ce soit
+  // aussi le cas de celles jamais consultées, on les récupère discrètement en
+  // arrière-plan tant qu'il y a du réseau, sans bloquer l'utilisation de l'app.
+  const photoPrefetchDone = new Set();
+  let prefetchRunning = false;
+
+  async function isPhotoCached(id){
+    try{ await getDocFromCache(doc(db, PHOTOS_COL, id)); return true; }
+    catch(e){ return false; }
+  }
+
+  async function prefetchPhotos(){
+    if(prefetchRunning || !navigator.onLine) return;
+    prefetchRunning = true;
+    try{
+      const ids = [];
+      // Uniquement les anomalies actives : l'historique n'est pas préchargé.
+      activeAnomalies().forEach(a => getPhotoIds(a).forEach(pid => {
+        if(!photoPrefetchDone.has(pid)) ids.push(pid);
+      }));
+      for(const pid of ids){
+        if(!navigator.onLine) break;
+        photoPrefetchDone.add(pid);
+        if(await isPhotoCached(pid)) continue;
+        try{ await getDoc(doc(db, PHOTOS_COL, pid)); }catch(e){ photoPrefetchDone.delete(pid); }
+        // Pause entre chaque photo pour ne pas gêner l'usage ni saturer le réseau.
+        await new Promise(r => setTimeout(r, 400));
+      }
+    }finally{
+      prefetchRunning = false;
+    }
+  }
+
   // ---------------- Notifications push ----------------
   function pushSupported(){
     return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
@@ -697,7 +731,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }catch(e){ /* sans effet sur l'enregistrement */ }
   }
 
-  const APP_VERSION = '1.6';
+  const APP_VERSION = '1.7';
   const MAX_PHOTOS = 4;
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
@@ -1053,7 +1087,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     {
       icon: '📶',
       title: 'Fonctionne hors connexion',
-      text: "Pas de réseau ? Vous pouvez quand même consulter vos anomalies et en créer de nouvelles. Restez simplement sur l'application jusqu'à voir le message \"Anomalie enregistrée\" avant de la fermer, le temps que la sauvegarde soit bien prise en compte sur votre appareil. Dès que la connexion revient, tout se synchronise automatiquement avec le reste de l'équipe — le point en haut de l'écran passe au vert une fois à jour."
+      text: "Pas de réseau ? Vous pouvez quand même consulter vos anomalies, leurs photos, et en créer de nouvelles. Restez simplement sur l'application jusqu'à voir le message \"Anomalie enregistrée\" avant de la fermer, le temps que la sauvegarde soit bien prise en compte sur votre appareil. Dès que la connexion revient, tout se synchronise automatiquement avec le reste de l'équipe — le point en haut de l'écran passe au vert une fois à jour."
     },
     {
       icon: '📋',
@@ -1409,6 +1443,12 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
           galleryLoading = false;
           renderPhotoGallery();
           updatePhotoButtonsState();
+          const missing = results.length - existingPhotos.length;
+          if(missing > 0 && !navigator.onLine){
+            showToast(missing === 1
+              ? '1 photo non disponible hors connexion'
+              : `${missing} photos non disponibles hors connexion`);
+          }
         });
       }
     }
@@ -1730,7 +1770,10 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
 
     if(!navigator.onLine) updateSyncStatus(true, false);
     window.addEventListener('offline', ()=> updateSyncStatus(true, false));
-    window.addEventListener('online', ()=> updateSyncStatus(false, false));
+    window.addEventListener('online', ()=>{
+      updateSyncStatus(false, false);
+      setTimeout(prefetchPhotos, 3000);
+    });
     document.addEventListener('visibilitychange', ()=>{
       if(document.visibilityState === 'hidden'){
         // On quitte l'app : on mémorise l'instant, qui servira de repère au retour.
@@ -1748,6 +1791,8 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       if(!modalOpen) render();
       updateSyncStatus(snapshot.metadata.fromCache, snapshot.metadata.hasPendingWrites);
       checkForNewAnomalies(anomalies);
+      // Rend les photos consultables même sans réseau par la suite.
+      setTimeout(prefetchPhotos, 2500);
     }, (error)=>{
       console.error(error);
       updateSyncStatus(true, false);
