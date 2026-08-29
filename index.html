@@ -597,7 +597,7 @@ const PHOTOS_COL = 'photos';
     }catch(e){ return null; }
   }
 
-  const APP_VERSION = '2026.08.29';
+  const APP_VERSION = '2026.08.29-c';
   const MAX_PHOTOS = 4;
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
@@ -1442,6 +1442,12 @@ const PHOTOS_COL = 'photos';
   }
 
   const notifiedAnomalyIds = new Set();
+  // Référence de comparaison, figée pendant toute la session visible.
+  // Elle ne doit PAS être réécrite à chaque réception de données : les premières
+  // données viennent du cache local (sans les ajouts récents) et écraseraient la
+  // référence avant l'arrivée des vraies données du serveur.
+  let sessionBaseline = null;
+
   function goToNewAnomalies(items){
     if(items.length === 1){
       openForm(items[0].category, items[0].id);
@@ -1451,18 +1457,15 @@ const PHOTOS_COL = 'photos';
     }
   }
   function checkForNewAnomalies(list){
-    // Ne rien consommer tant que l'app n'est pas réellement à l'écran : sinon les
-    // anomalies reçues en arrière-plan seraient marquées "déjà vues" et l'utilisateur
-    // ne verrait aucune notification à sa prochaine ouverture.
     if(document.visibilityState !== 'visible') return;
-
-    const previous = getLastSeen();
-    if(!previous){
+    if(!sessionBaseline){
+      // Toute première utilisation : rien à signaler, on pose le repère.
+      sessionBaseline = new Date().toISOString();
       updateLastSeen();
       return;
     }
     const newOnes = list.filter(a =>
-      a.createdAt && a.createdAt > previous &&
+      a.createdAt && a.createdAt > sessionBaseline &&
       a.createdBy !== profile.name &&
       !notifiedAnomalyIds.has(a.id)
     );
@@ -1473,21 +1476,29 @@ const PHOTOS_COL = 'photos';
         ? '📋 1 nouvelle anomalie depuis votre dernière visite — toucher pour l\u2019ouvrir'
         : `📋 ${count} nouvelles anomalies depuis votre dernière visite — toucher pour les voir`;
       renderChips();
+      haptic(18);
       showToast(msg, 5000, ()=> goToNewAnomalies(newOnes));
     }
-    updateLastSeen();
   }
 
   function startRealtimeSync(){
+    // Repère de départ : la dernière fois que cet appareil a consulté l'app.
+    sessionBaseline = getLastSeen();
+
     if(!navigator.onLine) updateSyncStatus(true, false);
     window.addEventListener('offline', ()=> updateSyncStatus(true, false));
     window.addEventListener('online', ()=> updateSyncStatus(false, false));
     document.addEventListener('visibilitychange', ()=>{
-      if(document.visibilityState === 'visible'){
-        // Retour au premier plan : on évalue maintenant ce qui est arrivé pendant l'absence.
-        setTimeout(()=> checkForNewAnomalies(anomalies), 150);
+      if(document.visibilityState === 'hidden'){
+        // On quitte l'app : on mémorise l'instant, qui servira de repère au retour.
+        updateLastSeen();
+      }else{
+        // Retour à l'écran : on repart du repère posé au moment du départ.
+        sessionBaseline = getLastSeen();
+        setTimeout(()=> checkForNewAnomalies(anomalies), 200);
       }
     });
+    window.addEventListener('pagehide', updateLastSeen);
 
     onSnapshot(collection(db, ANOMALIES_COL), { includeMetadataChanges: true }, (snapshot)=>{
       anomalies = snapshot.docs.map(d=> ({ id: d.id, ...d.data() }));
@@ -1553,11 +1564,28 @@ const PHOTOS_COL = 'photos';
     });
   }
 
+  function setupAutoUpdate(){
+    if(!('serviceWorker' in navigator)) return;
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+      if(reloading) return;
+      reloading = true;
+      location.reload();
+    });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg)=>{
+      // Vérifie l'existence d'une nouvelle version à chaque retour dans l'app.
+      document.addEventListener('visibilitychange', ()=>{
+        if(document.visibilityState === 'visible') reg.update().catch(()=>{});
+      });
+    }).catch(()=>{ /* ignore */ });
+  }
+
   function init(){
     wireStaticEvents();
     loadProfile();
     render();
     startRealtimeSync();
+    setupAutoUpdate();
     if(!hasSeenTutorial()){
       setTimeout(()=>{ openTutorial(true); }, 400);
     }else if(!profile.name){
