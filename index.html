@@ -1374,10 +1374,12 @@ const PHOTOS_COL = 'photos';
     });
   }
 
-  function showToast(msg, duration){
+  function showToast(msg, duration, onClick){
     const t = $('#toast');
     t.textContent = msg;
     t.hidden = false;
+    t.style.cursor = onClick ? 'pointer' : '';
+    t.onclick = onClick ? ()=>{ t.hidden = true; clearTimeout(showToast._timer); onClick(); } : null;
     clearTimeout(showToast._timer);
     showToast._timer = setTimeout(()=>{ t.hidden = true; }, duration || 2600);
   }
@@ -1425,6 +1427,18 @@ const PHOTOS_COL = 'photos';
   }
 
   const notifiedAnomalyIds = new Set();
+  function goToNewAnomalies(items){
+    if(items.length === 1){
+      openForm(items[0].category, items[0].id);
+    }else{
+      items.forEach(a => expanded.add(a.category));
+      render();
+      setTimeout(()=>{
+        const catEl = document.querySelector(`.category[data-cat="${items[0].category}"]`);
+        if(catEl) catEl.scrollIntoView({behavior:'smooth', block:'start'});
+      }, 50);
+    }
+  }
   function checkForNewAnomalies(list){
     const previous = getLastSeen();
     if(!previous){
@@ -1439,7 +1453,10 @@ const PHOTOS_COL = 'photos';
     if(newOnes.length > 0){
       newOnes.forEach(a => notifiedAnomalyIds.add(a.id));
       const count = newOnes.length;
-      showToast(count === 1 ? '📋 1 nouvelle anomalie depuis votre dernière visite' : `📋 ${count} nouvelles anomalies depuis votre dernière visite`, 4500);
+      const msg = count === 1
+        ? '📋 1 nouvelle anomalie depuis votre dernière visite — toucher pour l\u2019ouvrir'
+        : `📋 ${count} nouvelles anomalies depuis votre dernière visite — toucher pour les voir`;
+      showToast(msg, 5000, ()=> goToNewAnomalies(newOnes));
     }
     updateLastSeen();
   }
