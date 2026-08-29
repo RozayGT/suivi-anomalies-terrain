@@ -1369,12 +1369,12 @@ const PHOTOS_COL = 'photos';
     });
   }
 
-  function showToast(msg){
+  function showToast(msg, duration){
     const t = $('#toast');
     t.textContent = msg;
     t.hidden = false;
     clearTimeout(showToast._timer);
-    showToast._timer = setTimeout(()=>{ t.hidden = true; }, 2600);
+    showToast._timer = setTimeout(()=>{ t.hidden = true; }, duration || 2600);
   }
 
   function exportCSV(){
@@ -1412,15 +1412,44 @@ const PHOTOS_COL = 'photos';
     }
   }
 
+  function getLastSeen(){
+    try{ return localStorage.getItem('anomalies_last_seen'); }catch(e){ return null; }
+  }
+  function updateLastSeen(){
+    try{ localStorage.setItem('anomalies_last_seen', new Date().toISOString()); }catch(e){ /* ignore */ }
+  }
+
+  let firstSnapshotHandled = false;
+  function showOpeningSummary(list){
+    const previous = getLastSeen();
+    if(previous){
+      const count = list.filter(a =>
+        a.createdAt && a.createdAt > previous && a.createdBy !== profile.name
+      ).length;
+      if(count > 0){
+        showToast(count === 1 ? '📋 1 nouvelle anomalie depuis votre dernière visite' : `📋 ${count} nouvelles anomalies depuis votre dernière visite`, 4500);
+      }
+    }
+    updateLastSeen();
+  }
+
   function startRealtimeSync(){
     if(!navigator.onLine) updateSyncStatus(true, false);
     window.addEventListener('offline', ()=> updateSyncStatus(true, false));
     window.addEventListener('online', ()=> updateSyncStatus(false, false));
+    document.addEventListener('visibilitychange', ()=>{
+      if(document.visibilityState === 'hidden') updateLastSeen();
+    });
+    window.addEventListener('pagehide', updateLastSeen);
 
     onSnapshot(collection(db, ANOMALIES_COL), { includeMetadataChanges: true }, (snapshot)=>{
       anomalies = snapshot.docs.map(d=> ({ id: d.id, ...d.data() }));
       if(!modalOpen) render();
       updateSyncStatus(snapshot.metadata.fromCache, snapshot.metadata.hasPendingWrites);
+      if(!firstSnapshotHandled){
+        firstSnapshotHandled = true;
+        showOpeningSummary(anomalies);
+      }
     }, (error)=>{
       console.error(error);
       updateSyncStatus(true, false);
