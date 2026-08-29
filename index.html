@@ -163,6 +163,12 @@
   .category[data-worst="red"]{border-left-color:var(--red);}
   .category[data-worst="amber"]{border-left-color:var(--amber);}
   .category[data-worst="green"]{border-left-color:var(--green);}
+  /* Catégories sans anomalie : présentes mais discrètes, pour que l'œil aille
+     directement vers celles qui ont du contenu. */
+  .category.is-empty{opacity:0.5; background:transparent; margin-bottom:6px;}
+  .category.is-empty .category-header{padding:9px 14px;}
+  .category.is-empty .cat-label{font-size:13px;}
+  .category.is-empty:active{opacity:0.8;}
   .category-header{
     display:flex; align-items:center; gap:10px; padding:13px 14px; cursor:pointer;
   }
@@ -827,7 +833,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '2.3';
+  const APP_VERSION = '2.4';
   const MAX_PHOTOS = 4;
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
@@ -1015,8 +1021,9 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
         }
       }
 
+      const isEmptyCat = currentView !== 'history' && all.length === 0;
       html += `
-        <div class="category" data-cat="${cat.id}" data-open="${isOpen}" data-worst="${currentView === 'history' ? '' : worst}">
+        <div class="category${isEmptyCat ? ' is-empty' : ''}" data-cat="${cat.id}" data-open="${isOpen}" data-worst="${currentView === 'history' ? '' : worst}">
           <div class="category-header" data-cat="${cat.id}">
             <span class="cat-label">${escapeHtml(cat.label)}</span>
             <div class="cat-counts">
