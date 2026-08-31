@@ -913,7 +913,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '2.7';
+  const APP_VERSION = '2.8';
   const MAX_PHOTOS = 4;
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
@@ -1209,7 +1209,6 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
           <button type="button" class="sheet-close" data-close aria-label="Fermer">✕</button>
           <div class="sheet-scroll">
             <div class="sheet-nav">
-              <button type="button" class="nav-back" id="navToSettings" aria-label="Réglages">‹</button>
               <h2>Compte</h2>
             </div>
 
@@ -1237,6 +1236,11 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
                       aria-label="Activer les notifications"></button>
             </div>
             <p class="settings-note">Être averti sur ce téléphone dès qu'un collègue ajoute une anomalie, même application fermée.</p>
+
+            <button type="button" class="settings-row" id="navToSettings" style="margin-top:6px;">
+              <span class="label">⚙️ Réglages</span>
+              <span class="chev">›</span>
+            </button>
           </div>
           <div class="sheet-actions">
             <button type="button" class="btn" data-close>Fermer</button>
@@ -1280,7 +1284,10 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
           <div class="sheet-handle"></div>
           <button type="button" class="sheet-close" data-close aria-label="Fermer">✕</button>
           <div class="sheet-scroll">
-            <div class="sheet-nav"><h2>Réglages</h2></div>
+            <div class="sheet-nav">
+              <button type="button" class="nav-back" id="navToAccount" aria-label="Retour au compte">‹</button>
+              <h2>Réglages</h2>
+            </div>
 
             <div class="settings-group">
               <p class="settings-group-title">Application</p>
@@ -1335,6 +1342,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       themeSwitch.setAttribute('aria-checked', isLight ? 'true' : 'false');
       haptic(8);
     });
+    $('#navToAccount').addEventListener('click', ()=>{ closeModal(); openAccount(); });
     $('#setTutorial').addEventListener('click', ()=>{ closeModal(); openTutorial(false); });
     $('#setAccount').addEventListener('click', ()=>{ closeModal(); openAccount(); });
     $('#setExport').addEventListener('click', ()=>{ exportCSV(); });
