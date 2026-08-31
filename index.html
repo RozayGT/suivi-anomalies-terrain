@@ -353,6 +353,30 @@
     font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:52%;
   }
   .settings-row .chev{color:var(--text-faint); font-size:15px; flex-shrink:0;}
+  /* Ligne non cliquable dans son ensemble : l'action se fait sur le contrôle. */
+  .settings-row.static{cursor:default;}
+  .settings-row.static:active{background:var(--panel);}
+  /* Interrupteur on/off */
+  .switch{
+    position:relative; width:48px; height:28px; border-radius:999px; flex-shrink:0;
+    background:var(--line); border:none; cursor:pointer; padding:0;
+    transition:background 0.18s ease;
+  }
+  .switch::after{
+    content:''; position:absolute; top:3px; left:3px; width:22px; height:22px;
+    border-radius:50%; background:#fff; transition:transform 0.18s ease;
+    box-shadow:0 1px 3px rgba(0,0,0,0.35);
+  }
+  .switch[data-on="true"]{background:var(--accent);}
+  .switch[data-on="true"]::after{transform:translateX(20px);}
+  .switch:active::after{width:24px;}
+  /* Petit bouton d'action à droite d'une ligne */
+  .row-btn{
+    flex-shrink:0; background:var(--panel-2); border:1px solid var(--line);
+    color:var(--accent); border-radius:9px; padding:8px 14px;
+    font-size:13.5px; font-weight:600; cursor:pointer; font-family:inherit;
+  }
+  .row-btn:active{background:var(--line);}
   .settings-note{
     font-size:12.5px; color:var(--text-dim); line-height:1.55; margin:0 4px 18px;
   }
@@ -889,7 +913,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '2.6';
+  const APP_VERSION = '2.7';
   const MAX_PHOTOS = 4;
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
@@ -1205,11 +1229,13 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
             <p class="settings-note">Ce nom identifie vos anomalies auprès de l'équipe et alimente le filtre « Les miennes ». Il reste enregistré sur ce téléphone.</p>
 
             <p class="settings-group-title">Notifications</p>
-            <button type="button" class="settings-row" id="accNotif">
+            <div class="settings-row static">
               <span class="label">Notifications</span>
-              <span class="value">${notificationsEnabled() ? 'activées' : 'désactivées'}</span>
-              <span class="chev">›</span>
-            </button>
+              <button type="button" class="switch" id="accNotifSwitch" role="switch"
+                      aria-checked="${notificationsEnabled() ? 'true' : 'false'}"
+                      data-on="${notificationsEnabled() ? 'true' : 'false'}"
+                      aria-label="Activer les notifications"></button>
+            </div>
             <p class="settings-note">Être averti sur ce téléphone dès qu'un collègue ajoute une anomalie, même application fermée.</p>
           </div>
           <div class="sheet-actions">
@@ -1221,11 +1247,21 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     `;
     $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') closeModal(); });
     $('#navToSettings').addEventListener('click', ()=>{ closeModal(); openSettings(); });
-    $('#accNotif').addEventListener('click', async ()=>{
-      if(notificationsEnabled()) await disableNotifications();
+
+    const notifSwitch = $('#accNotifSwitch');
+    notifSwitch.addEventListener('click', async ()=>{
+      if(notifSwitch.disabled) return;
+      notifSwitch.disabled = true;
+      const wasOn = notificationsEnabled();
+      if(wasOn) await disableNotifications();
       else await enableNotifications();
-      closeModal();
+      // On reste sur l'écran : seul l'interrupteur change d'état.
+      const nowOn = notificationsEnabled();
+      notifSwitch.dataset.on = nowOn ? 'true' : 'false';
+      notifSwitch.setAttribute('aria-checked', nowOn ? 'true' : 'false');
+      notifSwitch.disabled = false;
     });
+
     $('#accSave').addEventListener('click', ()=>{
       saveProfile($('#accName').value);
       closeModal();
@@ -1238,7 +1274,6 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   function openSettings(){
     modalOpen = true;
     lockBodyScroll();
-    const themeValue = getTheme() === 'light' ? 'clair' : 'sombre';
     $('#modalRoot').innerHTML = `
       <div class="overlay" id="overlayEl">
         <div class="sheet">
@@ -1249,16 +1284,17 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
 
             <div class="settings-group">
               <p class="settings-group-title">Application</p>
-              <button type="button" class="settings-row" id="setTheme">
-                <span class="label">Apparence</span>
-                <span class="value">${themeValue}</span>
-                <span class="chev">›</span>
-              </button>
-              <button type="button" class="settings-row" id="setTutorial">
+              <div class="settings-row static">
+                <span class="label">Mode clair</span>
+                <button type="button" class="switch" id="setThemeSwitch" role="switch"
+                        aria-checked="${getTheme() === 'light' ? 'true' : 'false'}"
+                        data-on="${getTheme() === 'light' ? 'true' : 'false'}"
+                        aria-label="Activer le mode clair"></button>
+              </div>
+              <div class="settings-row static">
                 <span class="label">Tutoriel</span>
-                <span class="value">revoir</span>
-                <span class="chev">›</span>
-              </button>
+                <button type="button" class="row-btn" id="setTutorial">Revoir</button>
+              </div>
             </div>
 
             <div class="settings-group">
@@ -1268,21 +1304,19 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
                 <span class="value">${profile.name ? escapeHtml(profile.name) : 'non renseigné'}</span>
                 <span class="chev">›</span>
               </button>
-              <button type="button" class="settings-row" id="setExport">
+              <div class="settings-row static">
                 <span class="label">Données</span>
-                <span class="value">export CSV</span>
-                <span class="chev">›</span>
-              </button>
+                <button type="button" class="row-btn" id="setExport">Exporter</button>
+              </div>
             </div>
 
             <div class="settings-group">
               <p class="settings-group-title">À propos</p>
-              <button type="button" class="settings-row" id="setUpdate">
+              <div class="settings-row static">
                 <span class="label">Mise à jour</span>
-                <span class="value">rechercher</span>
-                <span class="chev">›</span>
-              </button>
-              <div class="settings-row" style="cursor:default;">
+                <button type="button" class="row-btn" id="setUpdate">Rechercher</button>
+              </div>
+              <div class="settings-row static">
                 <span class="label">Version</span>
                 <span class="value">${APP_VERSION}</span>
               </div>
@@ -1292,16 +1326,19 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       </div>
     `;
     $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') closeModal(); });
-    $('#setTheme').addEventListener('click', ()=>{
+    const themeSwitch = $('#setThemeSwitch');
+    themeSwitch.addEventListener('click', ()=>{
+      // Bascule immédiate, sans quitter l'écran des réglages.
       setTheme(getTheme() === 'light' ? 'dark' : 'light');
-      closeModal();
-      openSettings();
+      const isLight = getTheme() === 'light';
+      themeSwitch.dataset.on = isLight ? 'true' : 'false';
+      themeSwitch.setAttribute('aria-checked', isLight ? 'true' : 'false');
+      haptic(8);
     });
     $('#setTutorial').addEventListener('click', ()=>{ closeModal(); openTutorial(false); });
     $('#setAccount').addEventListener('click', ()=>{ closeModal(); openAccount(); });
-    $('#setExport').addEventListener('click', ()=>{ closeModal(); exportCSV(); });
+    $('#setExport').addEventListener('click', ()=>{ exportCSV(); });
     $('#setUpdate').addEventListener('click', ()=>{
-      closeModal();
       showToast('Recherche d\u2019une mise à jour…');
       checkForAppUpdate(true);
     });
