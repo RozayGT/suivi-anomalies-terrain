@@ -99,19 +99,30 @@
 
   /* ---------- Header ---------- */
   .topbar{
-    display:flex; align-items:center; justify-content:space-between;
-    padding:calc(18px + env(safe-area-inset-top)) 16px 14px; background:linear-gradient(180deg, var(--bg-alt), var(--bg));
+    display:flex; flex-direction:column; align-items:stretch; gap:6px;
+    padding:calc(14px + env(safe-area-inset-top)) 16px 14px; background:linear-gradient(180deg, var(--bg-alt), var(--bg));
     border-bottom:1px solid var(--line);
     position:sticky; top:0; z-index:20;
   }
-  .brand{display:flex; align-items:center; gap:10px;}
+  .date-line{
+    margin:0; font-size:11px; color:var(--text-faint); text-transform:uppercase;
+    letter-spacing:0.14em; font-weight:600;
+  }
+  .topbar-row{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .brand{display:flex; align-items:center; gap:10px; min-width:0;}
   .brand-icon{
     width:34px; height:34px; border-radius:9px; background:#E2001A;
     display:flex; align-items:center; justify-content:center; flex-shrink:0;
     box-shadow:0 2px 6px rgba(226,0,26,0.35);
   }
   .brand h1{font-size:19px; font-weight:600; text-transform:uppercase; color:var(--text);}
-  .brand-sub{margin:1px 0 0; font-size:11.5px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace; letter-spacing:0.03em;}
+  .avatar-btn{
+    width:42px; height:42px; border-radius:50%; border:none; flex-shrink:0;
+    background:var(--accent); color:#0d1116; font-size:17px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    font-family:'Oswald',sans-serif;
+  }
+  .avatar-btn:active{opacity:0.8;}
   .header-actions{display:flex; align-items:center; gap:6px;}
   .icon-btn{
     background:var(--panel); border:1px solid var(--line); color:var(--text);
@@ -313,6 +324,51 @@
     font-family:'IBM Plex Mono',monospace; margin:16px 0 0;
   }
 
+  /* ---------- Écrans de réglages ---------- */
+  .sheet-nav{
+    display:flex; align-items:center; gap:10px; margin-bottom:20px; padding-right:46px;
+  }
+  .sheet-nav h2{margin:0; font-size:20px;}
+  .nav-back{
+    background:none; border:none; color:var(--text); font-size:24px; line-height:1;
+    padding:2px 6px 2px 0; cursor:pointer; flex-shrink:0;
+  }
+  .nav-back:active{opacity:0.6;}
+  .settings-group{margin-bottom:22px;}
+  .settings-group:last-of-type{margin-bottom:8px;}
+  .settings-group-title{
+    font-size:11px; color:var(--text-faint); text-transform:uppercase;
+    letter-spacing:0.12em; margin:0 0 8px 4px; font-weight:700;
+  }
+  .settings-row{
+    display:flex; align-items:center; gap:10px; width:100%;
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:16px 15px; margin-bottom:8px; cursor:pointer; text-align:left;
+    color:var(--text); font-size:15.5px; font-weight:600;
+  }
+  .settings-row:active{background:var(--panel-2);}
+  .settings-row .label{flex:1; min-width:0;}
+  .settings-row .value{
+    color:var(--accent); font-family:'IBM Plex Mono',monospace; font-size:13.5px;
+    font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:52%;
+  }
+  .settings-row .chev{color:var(--text-faint); font-size:15px; flex-shrink:0;}
+  .settings-note{
+    font-size:12.5px; color:var(--text-dim); line-height:1.55; margin:0 4px 18px;
+  }
+  .account-card{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:16px 15px; margin-bottom:20px; display:flex; align-items:center; gap:13px;
+  }
+  .account-card .avatar-lg{
+    width:46px; height:46px; border-radius:50%; background:var(--accent); color:#0d1116;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    font-family:'Oswald',sans-serif; font-size:19px; font-weight:700;
+  }
+  .account-card .who{flex:1; min-width:0;}
+  .account-card .who strong{display:block; font-size:16px;}
+  .account-card .who span{display:block; font-size:12.5px; color:var(--text-dim); margin-top:2px;}
+
   .toast{
     position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
     background:var(--panel-2); border:1px solid var(--line); color:var(--text);
@@ -399,26 +455,26 @@
 <body>
 <div id="app">
   <div class="topbar">
-    <div class="brand">
-      <div class="brand-icon" aria-hidden="true">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <line x1="3.5" y1="7.5" x2="20.5" y2="7.5" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/>
-          <line x1="3.5" y1="16.5" x2="20.5" y2="16.5" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/>
-          <line x1="6.5" y1="5.3" x2="6.5" y2="18.7" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
-          <line x1="10.5" y1="5.3" x2="10.5" y2="18.7" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
-          <line x1="14.5" y1="5.3" x2="14.5" y2="18.7" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
-          <line x1="18.5" y1="5.3" x2="18.5" y2="18.7" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
-        </svg>
+    <p class="date-line" id="dateLine"></p>
+    <div class="topbar-row">
+      <div class="brand">
+        <div class="brand-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <line x1="3.5" y1="7.5" x2="20.5" y2="7.5" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/>
+            <line x1="3.5" y1="16.5" x2="20.5" y2="16.5" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/>
+            <line x1="6.5" y1="5.3" x2="6.5" y2="18.7" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
+            <line x1="10.5" y1="5.3" x2="10.5" y2="18.7" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
+            <line x1="14.5" y1="5.3" x2="14.5" y2="18.7" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
+            <line x1="18.5" y1="5.3" x2="18.5" y2="18.7" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h1 id="pageTitle">Suivi Anomalies</h1>
       </div>
-      <div>
-        <h1>Suivi Anomalies</h1>
-        <p class="brand-sub" id="brandSub">RÉSEAU TERRAIN</p>
+      <div class="header-actions">
+        <button class="icon-btn" id="historyBtn" title="Historique">🗂️</button>
+        <button class="icon-btn" id="refreshBtn" title="Actualiser">⟳</button>
+        <button class="avatar-btn" id="menuBtn" title="Compte et réglages">?</button>
       </div>
-    </div>
-    <div class="header-actions">
-      <button class="icon-btn" id="historyBtn" title="Historique">🗂️</button>
-      <button class="icon-btn" id="refreshBtn" title="Actualiser">⟳</button>
-      <button class="icon-btn" id="menuBtn" title="Menu">⋮</button>
     </div>
   </div>
   <div class="sync-row">
@@ -833,7 +889,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '2.5';
+  const APP_VERSION = '2.6';
   const MAX_PHOTOS = 4;
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
@@ -1055,8 +1111,16 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   }
 
   function render(){
-    const sub = $('#brandSub');
-    if(sub) sub.textContent = currentView === 'history' ? 'HISTORIQUE' : 'RÉSEAU TERRAIN';
+    const title = $('#pageTitle');
+    if(title) title.textContent = currentView === 'history' ? 'Historique' : 'Suivi Anomalies';
+    const dateEl = $('#dateLine');
+    if(dateEl){
+      dateEl.textContent = new Date().toLocaleDateString('fr-FR', {
+        weekday: 'long', day: 'numeric', month: 'long'
+      });
+    }
+    const avatar = $('#menuBtn');
+    if(avatar) avatar.textContent = initialOf(profile.name);
     const histBtn = $('#historyBtn');
     if(histBtn){
       histBtn.textContent = currentView === 'history' ? '←' : '🗂️';
@@ -1104,58 +1168,139 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     });
   }
 
-  function openMenu(){
+  function initialOf(name){
+    const n = (name || '').trim();
+    return n ? n.charAt(0).toUpperCase() : '?';
+  }
+
+  // Écran ouvert par la pastille de profil.
+  function openAccount(){
     modalOpen = true;
     lockBodyScroll();
-    const themeLabel = getTheme() === 'light' ? '🌙 Passer en mode sombre' : '☀️ Passer en mode clair';
+    const name = profile.name || '';
     $('#modalRoot').innerHTML = `
       <div class="overlay" id="overlayEl">
         <div class="sheet">
           <div class="sheet-handle"></div>
           <button type="button" class="sheet-close" data-close aria-label="Fermer">✕</button>
           <div class="sheet-scroll">
-            <h2>Menu</h2>
-            <p class="sheet-sub">${profile.name ? 'Connecté en tant que '+escapeHtml(profile.name) : 'Aucun nom enregistré'}</p>
-            <div class="menu-section">
-              <p class="menu-section-title">Mon profil</p>
-              <div class="menu-list">
-                <button class="menu-item" id="menuProfile">✎ Modifier mon nom</button>
-                <button class="menu-item" id="menuNotif">${notificationsEnabled() ? '🔕 Désactiver les notifications' : '🔔 Activer les notifications'}</button>
+            <div class="sheet-nav">
+              <button type="button" class="nav-back" id="navToSettings" aria-label="Réglages">‹</button>
+              <h2>Compte</h2>
+            </div>
+
+            <p class="settings-group-title">Identité</p>
+            <div class="account-card">
+              <div class="avatar-lg">${escapeHtml(initialOf(name))}</div>
+              <div class="who">
+                <strong>${name ? escapeHtml(name) : 'Nom non renseigné'}</strong>
+                <span>${name ? 'Apparaît sur vos ajouts et traitements' : 'À renseigner pour identifier vos ajouts'}</span>
               </div>
             </div>
-            <div class="menu-section">
-              <p class="menu-section-title">Données</p>
-              <div class="menu-list">
-                <button class="menu-item" id="menuExport">⇩ Exporter en CSV</button>
-              </div>
+
+            <div class="field">
+              <label for="accName">Nom affiché</label>
+              <input id="accName" type="text" value="${escapeHtml(name)}" placeholder="ex : J. Martin" maxlength="60" autocapitalize="words">
             </div>
-            <div class="menu-section">
-              <p class="menu-section-title">Application</p>
-              <div class="menu-list">
-                <button class="menu-item" id="menuTheme">${themeLabel}</button>
-                <button class="menu-item" id="menuTutorial">❓ Revoir le tutoriel</button>
-                <button class="menu-item" id="menuUpdate">🔄 Rechercher une mise à jour</button>
-              </div>
-            </div>
-            <p class="app-version">Version ${APP_VERSION}</p>
+            <p class="settings-note">Ce nom identifie vos anomalies auprès de l'équipe et alimente le filtre « Les miennes ». Il reste enregistré sur ce téléphone.</p>
+
+            <p class="settings-group-title">Notifications</p>
+            <button type="button" class="settings-row" id="accNotif">
+              <span class="label">Notifications</span>
+              <span class="value">${notificationsEnabled() ? 'activées' : 'désactivées'}</span>
+              <span class="chev">›</span>
+            </button>
+            <p class="settings-note">Être averti sur ce téléphone dès qu'un collègue ajoute une anomalie, même application fermée.</p>
+          </div>
+          <div class="sheet-actions">
+            <button type="button" class="btn" data-close>Fermer</button>
+            <button type="button" class="btn primary" id="accSave">Enregistrer</button>
           </div>
         </div>
       </div>
     `;
     $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') closeModal(); });
-    $('#menuProfile').addEventListener('click', ()=>{ closeModal(); openProfileModal(); });
-    $('#menuTheme').addEventListener('click', ()=>{
-      setTheme(getTheme() === 'light' ? 'dark' : 'light');
-      closeModal();
-    });
-    $('#menuTutorial').addEventListener('click', ()=>{ closeModal(); openTutorial(false); });
-    $('#menuExport').addEventListener('click', ()=>{ closeModal(); exportCSV(); });
-    $('#menuNotif').addEventListener('click', async ()=>{
-      closeModal();
+    $('#navToSettings').addEventListener('click', ()=>{ closeModal(); openSettings(); });
+    $('#accNotif').addEventListener('click', async ()=>{
       if(notificationsEnabled()) await disableNotifications();
       else await enableNotifications();
+      closeModal();
     });
-    $('#menuUpdate').addEventListener('click', ()=>{
+    $('#accSave').addEventListener('click', ()=>{
+      saveProfile($('#accName').value);
+      closeModal();
+      render();
+      showToast('Nom enregistré');
+    });
+  }
+
+  // Écran de réglages, accessible depuis la flèche de l'écran Compte.
+  function openSettings(){
+    modalOpen = true;
+    lockBodyScroll();
+    const themeValue = getTheme() === 'light' ? 'clair' : 'sombre';
+    $('#modalRoot').innerHTML = `
+      <div class="overlay" id="overlayEl">
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <button type="button" class="sheet-close" data-close aria-label="Fermer">✕</button>
+          <div class="sheet-scroll">
+            <div class="sheet-nav"><h2>Réglages</h2></div>
+
+            <div class="settings-group">
+              <p class="settings-group-title">Application</p>
+              <button type="button" class="settings-row" id="setTheme">
+                <span class="label">Apparence</span>
+                <span class="value">${themeValue}</span>
+                <span class="chev">›</span>
+              </button>
+              <button type="button" class="settings-row" id="setTutorial">
+                <span class="label">Tutoriel</span>
+                <span class="value">revoir</span>
+                <span class="chev">›</span>
+              </button>
+            </div>
+
+            <div class="settings-group">
+              <p class="settings-group-title">Compte et données</p>
+              <button type="button" class="settings-row" id="setAccount">
+                <span class="label">Compte</span>
+                <span class="value">${profile.name ? escapeHtml(profile.name) : 'non renseigné'}</span>
+                <span class="chev">›</span>
+              </button>
+              <button type="button" class="settings-row" id="setExport">
+                <span class="label">Données</span>
+                <span class="value">export CSV</span>
+                <span class="chev">›</span>
+              </button>
+            </div>
+
+            <div class="settings-group">
+              <p class="settings-group-title">À propos</p>
+              <button type="button" class="settings-row" id="setUpdate">
+                <span class="label">Mise à jour</span>
+                <span class="value">rechercher</span>
+                <span class="chev">›</span>
+              </button>
+              <div class="settings-row" style="cursor:default;">
+                <span class="label">Version</span>
+                <span class="value">${APP_VERSION}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') closeModal(); });
+    $('#setTheme').addEventListener('click', ()=>{
+      setTheme(getTheme() === 'light' ? 'dark' : 'light');
+      closeModal();
+      openSettings();
+    });
+    $('#setTutorial').addEventListener('click', ()=>{ closeModal(); openTutorial(false); });
+    $('#setAccount').addEventListener('click', ()=>{ closeModal(); openAccount(); });
+    $('#setExport').addEventListener('click', ()=>{ closeModal(); exportCSV(); });
+    $('#setUpdate').addEventListener('click', ()=>{
       closeModal();
       showToast('Recherche d\u2019une mise à jour…');
       checkForAppUpdate(true);
@@ -1201,7 +1346,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     {
       icon: '\u{1F514}',
       title: '\u00cAtre pr\u00e9venu',
-      text: "\u00c0 l'ouverture, un message vous indique les anomalies ajout\u00e9es par vos coll\u00e8gues depuis votre derni\u00e8re visite. Touchez-le pour les afficher directement.\n\nPour aller plus loin, activez les notifications depuis le menu \u22ee : vous serez alors averti sur votre t\u00e9l\u00e9phone m\u00eame application ferm\u00e9e. \u00c0 faire une fois sur chaque t\u00e9l\u00e9phone."
+      text: "\u00c0 l'ouverture, un message vous indique les anomalies ajout\u00e9es par vos coll\u00e8gues depuis votre derni\u00e8re visite. Touchez-le pour les afficher directement.\n\nPour aller plus loin, activez les notifications depuis votre pastille de profil en haut \u00e0 droite : vous serez alors averti sur votre t\u00e9l\u00e9phone m\u00eame application ferm\u00e9e. \u00c0 faire une fois sur chaque t\u00e9l\u00e9phone."
     },
     {
       icon: '\u{1F4F6}',
@@ -1210,8 +1355,8 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     },
     {
       icon: '\u2699\uFE0F',
-      title: 'Le menu',
-      text: "Le bouton \u22ee en haut \u00e0 droite regroupe vos r\u00e9glages : votre nom (celui qui appara\u00eet sur vos ajouts), les notifications, l'export de toutes les anomalies en CSV, le mode clair ou sombre, et ce tutoriel que vous pouvez rouvrir quand vous voulez.\n\nBonne utilisation !"
+      title: 'Compte et r\u00e9glages',
+      text: "La pastille ronde en haut \u00e0 droite, avec votre initiale, ouvre votre compte : votre nom affich\u00e9 et vos notifications.\n\nDepuis cet \u00e9cran, la fl\u00e8che \u2039 en haut \u00e0 gauche donne acc\u00e8s aux r\u00e9glages complets : apparence claire ou sombre, export CSV, recherche de mise \u00e0 jour, et ce tutoriel que vous pouvez rouvrir quand vous voulez.\n\nBonne utilisation !"
     },
   ];
 
@@ -1957,7 +2102,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   // ---------------- Event wiring ----------------
   function wireStaticEvents(){
     $('#fab').addEventListener('click', openCategoryPicker);
-    $('#menuBtn').addEventListener('click', openMenu);
+    $('#menuBtn').addEventListener('click', openAccount);
     $('#historyBtn').addEventListener('click', ()=>{
       currentView = currentView === 'history' ? 'home' : 'history';
       activeFilter = 'all';
