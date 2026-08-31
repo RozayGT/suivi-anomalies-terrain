@@ -617,6 +617,9 @@ import {
   initializeFirestore, persistentLocalCache, persistentSingleTabManager,
   collection, doc, setDoc, deleteDoc, getDoc, getDocFromCache, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
+import {
+  getAuth, signInAnonymously, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCPPl7FjwIdTGGeLExr7PKGpDPYR8kX7NI",
@@ -632,6 +635,7 @@ const fbApp = initializeApp(firebaseConfig);
 const db = initializeFirestore(fbApp, {
   localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
 });
+const auth = getAuth(fbApp);
 const ANOMALIES_COL = 'anomalies';
 const PHOTOS_COL = 'photos';
 const PUSHSUBS_COL = 'pushSubs';
@@ -994,7 +998,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '4.0';
+  const APP_VERSION = '4.1';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -1025,12 +1029,14 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     if(nextStatus === 'Traité'){
       if(!updated.dateTraitement) updated.dateTraitement = new Date().toISOString().slice(0,10);
       if(!updated.traitePar) updated.traitePar = profile.name || 'Anonyme';
+      updated.traiteParUid = currentUid || '';
       updated.treatedAt = new Date().toISOString();
     }else{
       // Repasse en cours : le traitement est annulé, on efface ses informations.
       updated.treatedAt = null;
       updated.dateTraitement = '';
       updated.traitePar = '';
+      updated.traiteParUid = '';
       updated.archived = false;
     }
     const ok = await saveAnomalyDoc(updated);
@@ -1099,9 +1105,11 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
 
   function matchesFilters(a){
     if(activeFilter==='mine'){
+      // L'identifiant prime : il reste valable même après un changement de nom.
+      const byUid = currentUid && (a.createdByUid === currentUid || a.traiteParUid === currentUid);
       const name = profile.name;
-      if(!name) return false;
-      if(a.createdBy!==name && a.updatedBy!==name && a.traitePar!==name) return false;
+      const byName = name && (a.createdBy===name || a.updatedBy===name || a.traitePar===name);
+      if(!byUid && !byName) return false;
     }else if(activeFilter==='new'){
       if(!newBatchIds.has(a.id)) return false;
     }else if(activeFilter!=='all' && a.statut!==FILTER_MAP[activeFilter]) return false;
@@ -1196,10 +1204,12 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
                   ${isNew ? '<span class="new-badge">NOUVEAU</span>' : ''}
                   ${(()=>{
                     // Traitée : on montre qui l'a traitée. Sinon, qui l'a créée.
-                    const who = (a.statut === 'Traité' && a.traitePar) ? a.traitePar : a.createdBy;
+                    const treated = a.statut === 'Traité' && a.traitePar;
+                    const who = treated ? a.traitePar : a.createdBy;
+                    const uid = treated ? (a.traiteParUid || '') : (a.createdByUid || '');
                     if(!who) return '';
-                    const label = (a.statut === 'Traité' && a.traitePar) ? 'Traité par' : 'Ajouté par';
-                    return `<span class="card-author" title="${escapeHtml(label + ' ' + who)}">${avatarMarkup(who, 26)}<span class="card-author-name">${escapeHtml(who)}</span></span>`;
+                    const label = treated ? 'Traité par' : 'Ajouté par';
+                    return `<span class="card-author" title="${escapeHtml(label + ' ' + who)}">${avatarMarkup({uid, name: who}, 26)}<span class="card-author-name">${escapeHtml(who)}</span></span>`;
                   })()}
                 </div>
               </div>
@@ -1237,12 +1247,12 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }
     root.innerHTML = html;
     // Récupère les photos des collègues dont une anomalie est affichée.
-    const authors = new Set();
+    const people = [];
     source.forEach(a=>{
-      if(a.createdBy) authors.add(a.createdBy);
-      if(a.traitePar) authors.add(a.traitePar);
+      if(a.createdBy) people.push({uid: a.createdByUid || '', name: a.createdBy});
+      if(a.traitePar) people.push({uid: a.traiteParUid || '', name: a.traitePar});
     });
-    if(authors.size) loadAvatarsFor([...authors]);
+    if(people.length) loadAvatarsFor(people);
   }
 
   const ICON_MOON = '<svg viewBox="0 0 24 24" fill="none"><path d="M20 14.5A8.2 8.2 0 0 1 9.5 4a8.4 8.4 0 1 0 10.5 10.5Z" fill="#C3C9D2" stroke="#C3C9D2" stroke-width="1.6" stroke-linejoin="round"/></svg>';
@@ -1330,52 +1340,60 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       if(dataUrl) localStorage.setItem(AVATAR_KEY, dataUrl);
       else localStorage.removeItem(AVATAR_KEY);
     }catch(e){ /* ignore */ }
-    // On publie aussi la photo pour que les collègues la voient sur les anomalies.
-    // Elle est rangée dans la collection des photos, avec une clé dérivée du nom.
-    const key = avatarKeyFor(profile.name);
-    if(!key) return;
-    if(dataUrl){
-      avatarCache.set(normalizeName(profile.name), dataUrl);
-      savePhotoDoc(key, dataUrl);
-    }else{
-      avatarCache.set(normalizeName(profile.name), null);
-      deletePhotoDoc(key);
-    }
+    // On publie la photo pour que les collègues la voient sur les anomalies.
+    // Deux clés : l'identifiant (stable) et le nom (pour les anciennes anomalies).
+    const keys = [];
+    if(currentUid) keys.push('avatar_' + currentUid);
+    const nameKey = avatarKeyFor(profile.name);
+    if(nameKey) keys.push(nameKey);
+    keys.forEach(key=>{
+      if(dataUrl){
+        avatarCache.set(key, dataUrl);
+        savePhotoDoc(key, dataUrl);
+      }else{
+        avatarCache.set(key, null);
+        deletePhotoDoc(key);
+      }
+    });
   }
 
   // ---- Avatars des collègues ----
-  const avatarCache = new Map();   // nom normalisé → dataURL ou null
+  const avatarCache = new Map();   // clé de photo → dataURL ou null
   const avatarPending = new Set();
   function normalizeName(name){
     return (name || '').trim().toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   }
-  function avatarKeyFor(name){
+  // Clé de la photo d'une personne : l'identifiant si on le connaît, sinon le nom.
+  // Le repli sur le nom garde les anciennes anomalies fonctionnelles.
+  function avatarKey(uid, name){
+    if(uid) return 'avatar_' + uid;
     const n = normalizeName(name);
     return n ? 'avatar_' + n : '';
   }
-  function avatarFor(name){
-    const n = normalizeName(name);
-    if(!n) return null;
-    return avatarCache.has(n) ? avatarCache.get(n) : undefined; // undefined = pas encore chargé
+  function avatarKeyFor(name){ return avatarKey('', name); }
+  function avatarFor(uid, name){
+    const key = avatarKey(uid, name);
+    if(!key) return null;
+    return avatarCache.has(key) ? avatarCache.get(key) : undefined; // undefined = pas encore chargé
   }
   // Récupère en arrière-plan les photos des personnes visibles à l'écran,
   // puis rafraîchit l'affichage une fois qu'elles sont disponibles.
-  async function loadAvatarsFor(names){
+  async function loadAvatarsFor(people){
     const todo = [];
-    names.forEach(name=>{
-      const n = normalizeName(name);
-      if(!n || avatarCache.has(n) || avatarPending.has(n)) return;
-      avatarPending.add(n);
-      todo.push(n);
+    people.forEach(p=>{
+      const key = typeof p === 'string' ? avatarKey('', p) : avatarKey(p.uid, p.name);
+      if(!key || avatarCache.has(key) || avatarPending.has(key)) return;
+      avatarPending.add(key);
+      todo.push(key);
     });
     if(!todo.length) return;
     let changed = false;
-    for(const n of todo){
-      const url = await getPhotoDoc('avatar_' + n);
-      avatarCache.set(n, url || null);
-      avatarPending.delete(n);
+    for(const key of todo){
+      const url = await getPhotoDoc(key);
+      avatarCache.set(key, url || null);
+      avatarPending.delete(key);
       if(url) changed = true;
     }
     if(changed && !modalOpen) render();
@@ -1403,8 +1421,10 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   }
   // Applique la photo (ou l'initiale) à un élément rond.
   // Pastille ronde : photo si disponible, sinon initiale.
-  function avatarMarkup(name, size, cls){
-    const url = avatarFor(name);
+  function avatarMarkup(person, size, cls){
+    const uid = (person && person.uid) || '';
+    const name = (person && person.name !== undefined) ? person.name : person;
+    const url = avatarFor(uid, name);
     const style = `width:${size}px;height:${size}px;font-size:${Math.round(size*0.42)}px;`
       + (url ? `background-image:url(${url});background-size:cover;background-position:center;` : '');
     return `<span class="mini-avatar ${cls||''}" style="${style}">${url ? '' : escapeHtml(initialOf(name))}</span>`;
@@ -1504,10 +1524,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       saveProfile($('#accName').value);
       // Le nom sert de clé à la photo partagée : on la republie sous le nouveau nom.
       const myPhoto = getAvatarPhoto();
-      if(myPhoto && profile.name){
-        avatarCache.set(normalizeName(profile.name), myPhoto);
-        savePhotoDoc(avatarKeyFor(profile.name), myPhoto);
-      }
+      if(myPhoto) setAvatarPhoto(myPhoto);
       closeModal();
       render();
       showToast('Profil enregistré');
@@ -1898,8 +1915,11 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       const who = ($('#f_par').value || '').trim();
       if(!who){ holder.innerHTML = ''; holder.style.display = 'none'; return; }
       holder.style.display = '';
-      holder.innerHTML = avatarMarkup(who, 34);
-      loadAvatarsFor([who]);
+      // Si le nom saisi est le vôtre, on utilise votre identifiant.
+      const uid = (who === (profile.name || '')) ? currentUid
+                : (editing && who === existing.traitePar ? (existing.traiteParUid || '') : '');
+      holder.innerHTML = avatarMarkup({uid, name: who}, 34);
+      loadAvatarsFor([{uid, name: who}]);
     }
     renderTraitePar();
     $('#f_par').addEventListener('input', renderTraitePar);
@@ -2131,8 +2151,17 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       if(newStatut === 'Traité'){
         // Point de départ du délai de 24 h avant classement automatique.
         payload.treatedAt = (editing && wasTraite && existing.treatedAt) ? existing.treatedAt : nowIso;
+        // L'identifiant n'est associé que si le nom saisi est bien le vôtre.
+        if(payload.traitePar && payload.traitePar === (profile.name || '')){
+          payload.traiteParUid = currentUid || '';
+        }else if(editing && existing.traiteParUid && payload.traitePar === existing.traitePar){
+          payload.traiteParUid = existing.traiteParUid;
+        }else{
+          payload.traiteParUid = '';
+        }
       }else{
         payload.treatedAt = null;
+        payload.traiteParUid = '';
         payload.archived = false;
       }
       let finalItem;
@@ -2146,6 +2175,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
           identifiant: nextIdentifiant(catId),
           createdAt: nowIso,
           createdBy: profile.name || 'Anonyme',
+          createdByUid: currentUid || '',
           ...payload
         };
       }
@@ -2390,6 +2420,28 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }
   }
 
+  // ---------------- Identité de l'appareil ----------------
+  // Firebase attribue silencieusement un identifiant unique et permanent.
+  // Il sert de clé stable : le nom affiché peut changer sans rien casser.
+  let currentUid = '';
+  let syncStarted = false;
+  function startAuth(){
+    onAuthStateChanged(auth, (user)=>{
+      if(user){
+        currentUid = user.uid;
+        if(!syncStarted){ syncStarted = true; startRealtimeSync(); }
+        if(!modalOpen) render();
+      }else{
+        signInAnonymously(auth).catch((e)=>{
+          console.error(e);
+          // Sans réseau au tout premier lancement : on affiche quand même
+          // ce qui est disponible localement.
+          if(!syncStarted){ syncStarted = true; startRealtimeSync(); }
+        });
+      }
+    });
+  }
+
   function startRealtimeSync(){
     // Repère de départ : la dernière fois que cet appareil a consulté l'app.
     sessionBaseline = getLastSeen();
@@ -2584,7 +2636,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     wireStaticEvents();
     loadProfile();
     render();
-    startRealtimeSync();
+    startAuth();
     setupAutoUpdate();
     refreshMySubEndpoint();
     // Une anomalie créée hors ligne lors d'une session précédente peut avoir
