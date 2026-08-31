@@ -115,21 +115,31 @@
     display:flex; align-items:center; justify-content:center; flex-shrink:0;
     box-shadow:0 2px 6px rgba(226,0,26,0.35);
   }
-  .brand h1{font-size:19px; font-weight:600; text-transform:uppercase; color:var(--text);}
+  .brand h1{
+    font-size:17px; font-weight:600; text-transform:uppercase; color:var(--text);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
   .avatar-btn{
-    width:42px; height:42px; border-radius:50%; border:none; flex-shrink:0;
-    background:var(--accent); color:#0d1116; font-size:17px; font-weight:700;
+    width:38px; height:38px; border-radius:50%; border:none; flex-shrink:0;
+    background:var(--accent); color:#0d1116; font-size:16px; font-weight:700;
     display:flex; align-items:center; justify-content:center; cursor:pointer;
     font-family:'Oswald',sans-serif;
   }
   .avatar-btn:active{opacity:0.8;}
-  .header-actions{display:flex; align-items:center; gap:6px;}
+  .header-actions{display:flex; align-items:center; gap:5px; flex-shrink:0;}
   .icon-btn{
     background:var(--panel); border:1px solid var(--line); color:var(--text);
-    width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center;
-    font-size:16px; cursor:pointer;
+    width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:15px; cursor:pointer; flex-shrink:0;
   }
   .icon-btn:active{background:var(--panel-2);}
+  /* Pastille d'apparence, à la manière d'un raccourci jour / nuit */
+  .theme-pill{
+    background:var(--panel); border:1px solid var(--line); color:var(--text);
+    border-radius:10px; padding:9px 11px; font-size:12.5px; font-weight:600;
+    cursor:pointer; flex-shrink:0; font-family:inherit; line-height:1;
+  }
+  .theme-pill:active{background:var(--panel-2);}
 
   .sync-row{
     display:flex; align-items:center; gap:6px; padding:0 16px 12px;
@@ -334,6 +344,11 @@
     padding:2px 6px 2px 0; cursor:pointer; flex-shrink:0;
   }
   .nav-back:active{opacity:0.6;}
+  .nav-fwd{
+    background:none; border:none; color:var(--text); font-size:24px; line-height:1;
+    padding:2px 0 2px 6px; cursor:pointer; flex-shrink:0; margin-left:auto;
+  }
+  .nav-fwd:active{opacity:0.6;}
   .settings-group{margin-bottom:22px;}
   .settings-group:last-of-type{margin-bottom:8px;}
   .settings-group-title{
@@ -496,8 +511,9 @@
       </div>
       <div class="header-actions">
         <button class="icon-btn" id="historyBtn" title="Historique">🗂️</button>
-        <button class="icon-btn" id="refreshBtn" title="Actualiser">⟳</button>
-        <button class="avatar-btn" id="menuBtn" title="Compte et réglages">?</button>
+        <button class="theme-pill" id="themeBtn" title="Changer l'apparence">Nuit</button>
+        <button class="icon-btn" id="settingsBtn" title="Réglages">⚙️</button>
+        <button class="avatar-btn" id="menuBtn" title="Compte">?</button>
       </div>
     </div>
   </div>
@@ -913,7 +929,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '2.8';
+  const APP_VERSION = '2.9';
   const MAX_PHOTOS = 4;
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
@@ -1134,6 +1150,11 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     root.innerHTML = html;
   }
 
+  function updateThemePill(){
+    const pill = $('#themeBtn');
+    if(pill) pill.textContent = getTheme() === 'light' ? 'Jour' : 'Nuit';
+  }
+
   function render(){
     const title = $('#pageTitle');
     if(title) title.textContent = currentView === 'history' ? 'Historique' : 'Suivi Anomalies';
@@ -1145,6 +1166,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }
     const avatar = $('#menuBtn');
     if(avatar) avatar.textContent = initialOf(profile.name);
+    updateThemePill();
     const histBtn = $('#historyBtn');
     if(histBtn){
       histBtn.textContent = currentView === 'history' ? '←' : '🗂️';
@@ -1209,6 +1231,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
           <button type="button" class="sheet-close" data-close aria-label="Fermer">✕</button>
           <div class="sheet-scroll">
             <div class="sheet-nav">
+              <button type="button" class="nav-back" id="navToSettings" aria-label="Aller aux réglages">‹</button>
               <h2>Compte</h2>
             </div>
 
@@ -1236,11 +1259,6 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
                       aria-label="Activer les notifications"></button>
             </div>
             <p class="settings-note">Être averti sur ce téléphone dès qu'un collègue ajoute une anomalie, même application fermée.</p>
-
-            <button type="button" class="settings-row" id="navToSettings" style="margin-top:6px;">
-              <span class="label">⚙️ Réglages</span>
-              <span class="chev">›</span>
-            </button>
           </div>
           <div class="sheet-actions">
             <button type="button" class="btn" data-close>Fermer</button>
@@ -1285,19 +1303,12 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
           <button type="button" class="sheet-close" data-close aria-label="Fermer">✕</button>
           <div class="sheet-scroll">
             <div class="sheet-nav">
-              <button type="button" class="nav-back" id="navToAccount" aria-label="Retour au compte">‹</button>
               <h2>Réglages</h2>
+              <button type="button" class="nav-fwd" id="navToAccount" aria-label="Aller au compte">›</button>
             </div>
 
             <div class="settings-group">
               <p class="settings-group-title">Application</p>
-              <div class="settings-row static">
-                <span class="label">Mode clair</span>
-                <button type="button" class="switch" id="setThemeSwitch" role="switch"
-                        aria-checked="${getTheme() === 'light' ? 'true' : 'false'}"
-                        data-on="${getTheme() === 'light' ? 'true' : 'false'}"
-                        aria-label="Activer le mode clair"></button>
-              </div>
               <div class="settings-row static">
                 <span class="label">Tutoriel</span>
                 <button type="button" class="row-btn" id="setTutorial">Revoir</button>
@@ -1333,15 +1344,6 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       </div>
     `;
     $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') closeModal(); });
-    const themeSwitch = $('#setThemeSwitch');
-    themeSwitch.addEventListener('click', ()=>{
-      // Bascule immédiate, sans quitter l'écran des réglages.
-      setTheme(getTheme() === 'light' ? 'dark' : 'light');
-      const isLight = getTheme() === 'light';
-      themeSwitch.dataset.on = isLight ? 'true' : 'false';
-      themeSwitch.setAttribute('aria-checked', isLight ? 'true' : 'false');
-      haptic(8);
-    });
     $('#navToAccount').addEventListener('click', ()=>{ closeModal(); openAccount(); });
     $('#setTutorial').addEventListener('click', ()=>{ closeModal(); openTutorial(false); });
     $('#setAccount').addEventListener('click', ()=>{ closeModal(); openAccount(); });
@@ -2158,10 +2160,12 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       window.scrollTo(0, 0);
       render();
     });
-    $('#refreshBtn').addEventListener('click', ()=>{
-      render();
-      showToast(navigator.onLine ? 'Déjà synchronisé en temps réel ✓' : 'Hors ligne — vos modifications sont en attente');
+    $('#themeBtn').addEventListener('click', ()=>{
+      setTheme(getTheme() === 'light' ? 'dark' : 'light');
+      updateThemePill();
+      haptic(8);
     });
+    $('#settingsBtn').addEventListener('click', openSettings);
     $('#filterChips').addEventListener('click', e=>{
       const chip = e.target.closest('.chip');
       if(!chip) return;
