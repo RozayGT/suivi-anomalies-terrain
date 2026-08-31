@@ -49,6 +49,11 @@
     --amber-bg:rgba(242,169,60,0.14);
     --green:#3DBE79;
     --green-bg:rgba(61,190,121,0.14);
+    /* Couleurs pleines des pastilles et bandes de statut : elles doivent rester
+       vives dans les deux thèmes, indépendamment de la lisibilité du texte. */
+    --red-solid:#E5484D;
+    --amber-solid:#F2A93C;
+    --green-solid:#3DBE79;
     --violet:#A78BFA;
     --violet-bg:rgba(167,139,250,0.16);
     --radius:12px;
@@ -68,9 +73,12 @@
     --red:#C82D33;
     --red-bg:rgba(200,45,51,0.10);
     --amber:#9C6300;
-    --amber-bg:rgba(156,99,0,0.12);
+    --amber-bg:rgba(242,169,60,0.18);
     --green:#188053;
     --green-bg:rgba(24,128,83,0.10);
+    --red-solid:#E5484D;
+    --amber-solid:#F2A93C;
+    --green-solid:#3DBE79;
     --violet:#6D48D6;
     --violet-bg:rgba(109,72,214,0.12);
     --shadow:0 8px 24px rgba(20,25,35,0.12);
@@ -157,8 +165,8 @@
     display:flex; align-items:center; gap:6px; padding:12px 16px 12px;
     font-size:11.5px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace;
   }
-  .sync-dot{width:6px;height:6px;border-radius:50%; background:var(--green); flex-shrink:0;}
-  .sync-dot.offline{background:var(--amber);}
+  .sync-dot{width:6px;height:6px;border-radius:50%; background:var(--green-solid); flex-shrink:0;}
+  .sync-dot.offline{background:var(--amber-solid);}
   @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:0.35;}}
   .sync-dot.live{animation:pulse 2.4s ease-in-out infinite;}
 
@@ -194,9 +202,9 @@
   /* ---------- Category rail ---------- */
   .rail{padding:4px 16px 12px; border-left:2px solid var(--line); margin:0 16px 0 22px;}
   .category{background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--line); border-radius:var(--radius); margin-bottom:10px; overflow:hidden;}
-  .category[data-worst="red"]{border-left-color:var(--red);}
-  .category[data-worst="amber"]{border-left-color:var(--amber);}
-  .category[data-worst="green"]{border-left-color:var(--green);}
+  .category[data-worst="red"]{border-left-color:var(--red-solid);}
+  .category[data-worst="amber"]{border-left-color:var(--amber-solid);}
+  .category[data-worst="green"]{border-left-color:var(--green-solid);}
   /* Catégories sans anomalie : présentes mais discrètes, pour que l'œil aille
      directement vers celles qui ont du contenu. */
   .category.is-empty{opacity:0.5; background:transparent; margin-bottom:6px;}
@@ -226,9 +234,9 @@
   }
   .anomaly-card:active{background:#2c333d;}
   .card-band{width:4px; flex-shrink:0; align-self:stretch;}
-  .card-band.non-traite{background:var(--red);}
-  .card-band.en-cours{background:var(--amber);}
-  .card-band.traite{background:var(--green);}
+  .card-band.non-traite{background:var(--red-solid);}
+  .card-band.en-cours{background:var(--amber-solid);}
+  .card-band.traite{background:var(--green-solid);}
   .card-body{display:flex; gap:10px; flex:1; min-width:0; padding:11px 12px;}
   .card-main{flex:1; min-width:0;}
   .card-side{
@@ -257,9 +265,9 @@
   .status-pill:active{background:var(--panel-2); transform:scale(0.97);}
   .status-pill .cycle-hint{color:var(--text-faint); font-size:11px; margin-left:1px;}
   .status-pill .dot{width:8px; height:8px; border-radius:50%;}
-  .status-pill.non-traite .dot{background:var(--red);}
-  .status-pill.en-cours .dot{background:var(--amber);}
-  .status-pill.traite .dot{background:var(--green);}
+  .status-pill.non-traite .dot{background:var(--red-solid);}
+  .status-pill.en-cours .dot{background:var(--amber-solid);}
+  .status-pill.traite .dot{background:var(--green-solid);}
   .card-photos{font-size:11.5px; color:var(--text-faint);}
 
   .add-anomaly-btn{
@@ -963,7 +971,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '3.5';
+  const APP_VERSION = '3.6';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -1198,14 +1206,14 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     root.innerHTML = html;
   }
 
-  const ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="#9aa3b0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.2 8.2 0 0 1 9.5 4a8.4 8.4 0 1 0 10.5 10.5Z"/></svg>';
-  const ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="#F5B32B" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4" fill="#F5B32B" stroke="#F5B32B"/><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/></svg>';
+  const ICON_MOON = '<svg viewBox="0 0 24 24" fill="none"><path d="M20 14.5A8.2 8.2 0 0 1 9.5 4a8.4 8.4 0 1 0 10.5 10.5Z" fill="#C3C9D2" stroke="#C3C9D2" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+  const ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="#F5B32B" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.1" fill="#F5B32B" stroke="#F5B32B"/><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/></svg>';
   function updateThemePill(){
     const btn = $('#themeBtn');
     if(!btn) return;
     const light = getTheme() === 'light';
-    // L'icône montre l'apparence actuellement active.
-    btn.innerHTML = light ? ICON_SUN : ICON_MOON;
+    // Le bouton montre l'apparence vers laquelle il fait basculer.
+    btn.innerHTML = light ? ICON_MOON : ICON_SUN;
     btn.title = light ? 'Passer en mode sombre' : 'Passer en mode clair';
   }
 
