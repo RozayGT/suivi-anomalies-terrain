@@ -909,6 +909,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
         createdAt: new Date().toISOString(),
       });
       try{ localStorage.setItem('anomalies_push', 'on'); }catch(e){}
+      mySubEndpoint = json.endpoint || '';
       showToast('Notifications activées ✓');
       return true;
     }catch(e){
@@ -928,6 +929,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       }
     }catch(e){ /* ignore */ }
     try{ localStorage.setItem('anomalies_push', 'off'); }catch(e){}
+    mySubEndpoint = '';
     showToast('Notifications désactivées');
   }
   // Prévient les autres appareils qu'une anomalie vient d'être créée.
@@ -944,11 +946,23 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     try{ return localStorage.getItem(PENDING_PUSH_KEY) !== null; }catch(e){ return false; }
   }
 
+  // Identifiant technique de l'abonnement de cet appareil : il sert à ne pas
+  // s'envoyer de notification à soi-même, indépendamment du nom affiché.
+  let mySubEndpoint = '';
+  async function refreshMySubEndpoint(){
+    if(!pushSupported()){ mySubEndpoint = ''; return; }
+    try{
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      mySubEndpoint = sub ? (sub.toJSON().endpoint || '') : '';
+    }catch(e){ mySubEndpoint = ''; }
+  }
+
   function sendPushRequest(author){
     return fetch(PUSH_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ author: author || '' }),
+      body: JSON.stringify({ author: author || '', self: mySubEndpoint }),
     });
   }
 
@@ -980,7 +994,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '3.9';
+  const APP_VERSION = '4.0';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -2572,6 +2586,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     render();
     startRealtimeSync();
     setupAutoUpdate();
+    refreshMySubEndpoint();
     // Une anomalie créée hors ligne lors d'une session précédente peut avoir
     // une notification encore en attente d'envoi.
     flushPendingPush();
