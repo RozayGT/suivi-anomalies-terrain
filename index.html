@@ -76,6 +76,18 @@
     --shadow:0 8px 24px rgba(20,25,35,0.12);
   }
   *,*::before,*::after{box-sizing:border-box;}
+  /* Supprime le rectangle bleu affiché par Android au toucher, et la sélection
+     accidentelle de texte lors des appuis sur les éléments interactifs. */
+  html{-webkit-tap-highlight-color:transparent;}
+  button, .category-header, .anomaly-card, .status-pill, .chip, .picker-item,
+  .settings-row, .photo-thumb, .tuto-dots .dot, .stat-pill, .sheet-handle{
+    -webkit-tap-highlight-color:transparent;
+    -webkit-touch-callout:none;
+    -webkit-user-select:none;
+    user-select:none;
+  }
+  /* Les champs de saisie doivent rester sélectionnables normalement. */
+  input, textarea, select{-webkit-user-select:auto; user-select:auto;}
   @media (prefers-reduced-motion: reduce){
     *{animation:none !important; transition:none !important;}
   }
@@ -128,18 +140,13 @@
   .avatar-btn:active{opacity:0.8;}
   .header-actions{display:flex; align-items:center; gap:5px; flex-shrink:0;}
   .icon-btn{
-    background:var(--panel); border:1px solid var(--line); color:var(--text);
-    width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center;
-    font-size:15px; cursor:pointer; flex-shrink:0;
+    background:var(--panel); border:1px solid var(--line); color:var(--text-dim);
+    width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; flex-shrink:0; padding:0;
   }
-  .icon-btn:active{background:var(--panel-2);}
-  /* Pastille d'apparence, à la manière d'un raccourci jour / nuit */
-  .theme-pill{
-    background:var(--panel); border:1px solid var(--line); color:var(--text);
-    border-radius:10px; padding:9px 11px; font-size:12.5px; font-weight:600;
-    cursor:pointer; flex-shrink:0; font-family:inherit; line-height:1;
-  }
-  .theme-pill:active{background:var(--panel-2);}
+  .icon-btn svg{width:18px; height:18px;}
+  .icon-btn:active{background:var(--panel-2); color:var(--text);}
+  .avatar-btn{width:36px; height:36px;}
 
   .sync-row{
     display:flex; align-items:center; gap:6px; padding:0 16px 12px;
@@ -209,21 +216,38 @@
   .category[data-open="true"] .category-body{display:block;}
 
   .anomaly-card{
-    background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:11px 12px; margin-bottom:8px; cursor:pointer;
+    display:flex; background:var(--panel-2); border:1px solid var(--line);
+    border-radius:10px; overflow:hidden; margin-bottom:8px; cursor:pointer;
   }
   .anomaly-card:active{background:#2c333d;}
-  .card-top{display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:5px;}
-  .identifiant{font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:13.5px; color:var(--text);}
-  .priority-chip{font-size:10.5px; padding:2px 8px; border-radius:999px; text-transform:uppercase; letter-spacing:0.03em; white-space:nowrap;}
+  .card-band{width:4px; flex-shrink:0; align-self:stretch;}
+  .card-band.non-traite{background:var(--red);}
+  .card-band.en-cours{background:var(--amber);}
+  .card-band.traite{background:var(--green);}
+  .card-body{display:flex; gap:10px; flex:1; min-width:0; padding:11px 12px;}
+  .card-main{flex:1; min-width:0;}
+  .card-side{
+    display:flex; flex-direction:column; align-items:stretch; gap:5px;
+    flex-shrink:0; text-align:center;
+  }
+  .card-order{
+    background:var(--panel); border:1px solid var(--line); border-radius:6px;
+    padding:2px 0; font-family:'IBM Plex Mono',monospace; font-size:11.5px;
+    color:var(--text-dim);
+  }
+  .priority-chip{font-size:10.5px; padding:3px 8px; border-radius:6px; text-transform:uppercase; letter-spacing:0.03em; white-space:nowrap;}
   .priority-chip.p-faible{background:transparent; border:1px solid var(--line); color:var(--text-dim);}
   .priority-chip.p-moyenne{background:var(--accent-dim); color:var(--accent);}
   .priority-chip.p-elevee{background:var(--violet-bg); color:var(--violet);}
-  .card-meta{font-size:12px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace; margin-bottom:6px;}
-  .card-desc{font-size:13.5px; color:var(--text); margin-bottom:8px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
-  .card-bottom{display:flex; justify-content:space-between; align-items:center; gap:8px;}
+  .card-desc{
+    font-size:13.5px; color:var(--text); line-height:1.4; margin-bottom:5px;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  }
+  .card-meta{font-size:11.5px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace; margin-bottom:9px;}
+  .card-bottom{display:flex; align-items:center; gap:10px;}
   .status-pill{
-    display:flex; align-items:center; gap:5px; font-size:12.5px; cursor:pointer;
-    padding:8px 13px 8px 10px; border-radius:999px; background:var(--panel); border:1px solid var(--line);
+    display:flex; align-items:center; gap:5px; font-size:12px; cursor:pointer;
+    padding:7px 12px 7px 9px; border-radius:999px; background:var(--panel); border:1px solid var(--line);
   }
   .status-pill:active{background:var(--panel-2); transform:scale(0.97);}
   .status-pill .cycle-hint{color:var(--text-faint); font-size:11px; margin-left:1px;}
@@ -231,7 +255,7 @@
   .status-pill.non-traite .dot{background:var(--red);}
   .status-pill.en-cours .dot{background:var(--amber);}
   .status-pill.traite .dot{background:var(--green);}
-  .card-by{font-size:11px; color:var(--text-faint);}
+  .card-photos{font-size:11.5px; color:var(--text-faint);}
 
   .add-anomaly-btn{
     width:100%; background:transparent; border:1px dashed var(--line); color:var(--accent);
@@ -484,8 +508,8 @@
   .btn.danger-solid{background:var(--red); border-color:var(--red); color:#fff; flex:1;}
 
   .new-badge{
-    background:var(--accent); color:#0d1116; font-size:9.5px; font-weight:700;
-    padding:2px 6px; border-radius:5px; letter-spacing:0.04em; margin-left:6px; vertical-align:middle;
+    background:var(--accent); color:#0d1116; font-size:9px; font-weight:700;
+    padding:2px 5px; border-radius:5px; letter-spacing:0.03em; text-align:center;
   }
   .loading-screen{display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:70vh; color:var(--text-dim); gap:10px;}
   .spinner{width:22px; height:22px; border-radius:50%; border:2px solid var(--line); border-top-color:var(--accent); animation:spin 0.8s linear infinite;}
@@ -511,9 +535,13 @@
         <h1 id="pageTitle">Suivi Anomalies</h1>
       </div>
       <div class="header-actions">
-        <button class="icon-btn" id="historyBtn" title="Historique">🗂️</button>
-        <button class="theme-pill" id="themeBtn" title="Changer l'apparence">Nuit</button>
-        <button class="icon-btn" id="settingsBtn" title="Réglages">⚙️</button>
+        <button class="icon-btn" id="historyBtn" title="Historique" aria-label="Historique">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8Z"/><path d="M3 8 4.4 4.6A1.6 1.6 0 0 1 5.9 3.6h12.2a1.6 1.6 0 0 1 1.5 1L21 8"/><path d="M10 12h4"/></svg>
+        </button>
+        <button class="icon-btn" id="themeBtn" title="Changer l'apparence" aria-label="Changer l'apparence"></button>
+        <button class="icon-btn" id="settingsBtn" title="Réglages" aria-label="Réglages">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/></svg>
+        </button>
         <button class="avatar-btn" id="menuBtn" title="Compte">?</button>
       </div>
     </div>
@@ -930,8 +958,14 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '3.0';
+  const APP_VERSION = '3.2';
   const MAX_PHOTOS = 4;
+  // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
+  // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
+  function orderOf(a){
+    const m = /-(\d+)$/.exec(a.identifiant || '');
+    return m ? String(parseInt(m[1], 10)) : '–';
+  }
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
   function getPhotoIds(anomaly){
@@ -1102,19 +1136,27 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
         }else{
           cardsHtml = visibleItems.slice().sort((a,b)=> (b.createdAt||'').localeCompare(a.createdAt||'')).map(a=>{
             const isNew = a.createdAt && (Date.now() - new Date(a.createdAt).getTime()) < 24*60*60*1000;
+            const photoCount = getPhotoIds(a).length;
+            const bandClass = currentView === 'history' ? 'traite' : statusClass(a.statut);
             return `
             <div class="anomaly-card" data-cat="${cat.id}" data-id="${a.id}">
-              <div class="card-top">
-                <span class="identifiant">${escapeHtml(a.identifiant)}${(()=>{const n=getPhotoIds(a).length; return n>0 ? ' 📷'+(n>1?'×'+n:'') : '';})()}${isNew ? ' <span class="new-badge">NOUVEAU</span>' : ''}</span>
-                <span class="priority-chip ${priorityClass(a.priorite)}">${escapeHtml(a.priorite)}</span>
-              </div>
-              <div class="card-meta">${escapeHtml(a.voie||'—')} · PK ${escapeHtml(a.pk||'—')} · ${escapeHtml(a.equipement||'—')}</div>
-              <div class="card-desc">${escapeHtml(a.description||'')}</div>
-              <div class="card-bottom">
-                ${currentView === 'history'
-                  ? `<span class="status-pill traite" style="cursor:default"><span class="dot"></span>Archivée</span>`
-                  : `<span class="status-pill ${statusClass(a.statut)}"><span class="dot"></span>${escapeHtml(a.statut)}<span class="cycle-hint">⟳</span></span>`}
-                <span class="card-by">${a.updatedBy ? 'Modifié par '+escapeHtml(a.updatedBy) : ''}</span>
+              <span class="card-band ${bandClass}"></span>
+              <div class="card-body">
+                <div class="card-main">
+                  <div class="card-desc">${escapeHtml(a.description||'')}</div>
+                  <div class="card-meta">${escapeHtml(a.voie||'—')} · PK ${escapeHtml(a.pk||'—')} · ${escapeHtml(a.equipement||'—')}</div>
+                  <div class="card-bottom">
+                    ${currentView === 'history'
+                      ? `<span class="status-pill traite" style="cursor:default"><span class="dot"></span>Archivée</span>`
+                      : `<span class="status-pill ${statusClass(a.statut)}"><span class="dot"></span>${escapeHtml(a.statut)}<span class="cycle-hint">⟳</span></span>`}
+                    ${photoCount ? `<span class="card-photos">${photoCount > 1 ? photoCount + ' photos' : '1 photo'}</span>` : ''}
+                  </div>
+                </div>
+                <div class="card-side">
+                  <span class="priority-chip ${priorityClass(a.priorite)}">${escapeHtml(a.priorite)}</span>
+                  <span class="card-order" title="Numéro dans la catégorie">${escapeHtml(orderOf(a))}</span>
+                  ${isNew ? '<span class="new-badge">NOUVEAU</span>' : ''}
+                </div>
               </div>
             </div>
           `;}).join('');
@@ -1151,9 +1193,15 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     root.innerHTML = html;
   }
 
+  const ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.2 8.2 0 0 1 9.5 4a8.4 8.4 0 1 0 10.5 10.5Z"/></svg>';
+  const ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
   function updateThemePill(){
-    const pill = $('#themeBtn');
-    if(pill) pill.textContent = getTheme() === 'light' ? 'Jour' : 'Nuit';
+    const btn = $('#themeBtn');
+    if(!btn) return;
+    const light = getTheme() === 'light';
+    // On montre l'apparence vers laquelle on bascule.
+    btn.innerHTML = light ? ICON_MOON : ICON_SUN;
+    btn.title = light ? 'Passer en mode sombre' : 'Passer en mode clair';
   }
 
   function render(){
@@ -1368,6 +1416,13 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
             <div class="settings-group">
               <p class="settings-group-title">Application</p>
               <div class="settings-row static">
+                <span class="label">Mode clair</span>
+                <button type="button" class="switch" id="setThemeSwitch" role="switch"
+                        aria-checked="${getTheme() === 'light' ? 'true' : 'false'}"
+                        data-on="${getTheme() === 'light' ? 'true' : 'false'}"
+                        aria-label="Activer le mode clair"></button>
+              </div>
+              <div class="settings-row static">
                 <span class="label">Notifications</span>
                 <button type="button" class="switch" id="setNotifSwitch" role="switch"
                         aria-checked="${notificationsEnabled() ? 'true' : 'false'}"
@@ -1411,6 +1466,15 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     `;
     $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') closeModal(); });
     $('#navToAccount').addEventListener('click', ()=>{ closeModal(); openAccount(); });
+    const themeSwitch = $('#setThemeSwitch');
+    themeSwitch.addEventListener('click', ()=>{
+      setTheme(getTheme() === 'light' ? 'dark' : 'light');
+      const isLight = getTheme() === 'light';
+      themeSwitch.dataset.on = isLight ? 'true' : 'false';
+      themeSwitch.setAttribute('aria-checked', isLight ? 'true' : 'false');
+      updateThemePill();
+      haptic(8);
+    });
     const notifSwitch = $('#setNotifSwitch');
     notifSwitch.addEventListener('click', async ()=>{
       if(notifSwitch.disabled) return;
@@ -1471,7 +1535,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     {
       icon: '\u{1F514}',
       title: '\u00cAtre pr\u00e9venu',
-      text: "\u00c0 l'ouverture, un message vous indique les anomalies ajout\u00e9es par vos coll\u00e8gues depuis votre derni\u00e8re visite. Touchez-le pour les afficher directement.\n\nPour aller plus loin, activez les notifications depuis votre pastille de profil en haut \u00e0 droite : vous serez alors averti sur votre t\u00e9l\u00e9phone m\u00eame application ferm\u00e9e. \u00c0 faire une fois sur chaque t\u00e9l\u00e9phone."
+      text: "\u00c0 l'ouverture, un message vous indique les anomalies ajout\u00e9es par vos coll\u00e8gues depuis votre derni\u00e8re visite. Touchez-le pour les afficher directement.\n\nPour aller plus loin, ouvrez les r\u00e9glages (\u2699\uFE0F en haut de l'\u00e9cran) et activez les notifications : vous serez alors averti sur votre t\u00e9l\u00e9phone m\u00eame application ferm\u00e9e. \u00c0 faire une fois sur chaque t\u00e9l\u00e9phone."
     },
     {
       icon: '\u{1F4F6}',
@@ -1481,7 +1545,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     {
       icon: '\u2699\uFE0F',
       title: 'Compte et r\u00e9glages',
-      text: "La pastille ronde en haut \u00e0 droite, avec votre initiale, ouvre votre compte : votre nom affich\u00e9 et vos notifications.\n\nDepuis cet \u00e9cran, la fl\u00e8che \u2039 en haut \u00e0 gauche donne acc\u00e8s aux r\u00e9glages complets : apparence claire ou sombre, export CSV, recherche de mise \u00e0 jour, et ce tutoriel que vous pouvez rouvrir quand vous voulez.\n\nBonne utilisation !"
+      text: "En haut de l'\u00e9cran : \u{1F5C2} l'historique, la pastille Nuit / Jour pour changer d'apparence d'un geste, \u2699\uFE0F les r\u00e9glages, et votre pastille de profil.\n\nLe profil sert \u00e0 votre nom affich\u00e9 et \u00e0 votre photo. Les r\u00e9glages regroupent les notifications, l'export CSV, la recherche de mise \u00e0 jour et ce tutoriel. Les fl\u00e8ches \u2039 et \u203a font passer de l'un \u00e0 l'autre.\n\nBonne utilisation !"
     },
   ];
 
