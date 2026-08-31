@@ -984,7 +984,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '3.7';
+  const APP_VERSION = '3.8';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -1184,7 +1184,13 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
                   <span class="priority-chip ${priorityClass(a.priorite)}">${escapeHtml(a.priorite)}</span>
                   <span class="card-order" title="Numéro dans la catégorie">${escapeHtml(orderOf(a))}</span>
                   ${isNew ? '<span class="new-badge">NOUVEAU</span>' : ''}
-                  ${a.createdBy ? `<span class="card-author">${avatarMarkup(a.createdBy, 26)}<span class="card-author-name">${escapeHtml(a.createdBy)}</span></span>` : ''}
+                  ${(()=>{
+                    // Traitée : on montre qui l'a traitée. Sinon, qui l'a créée.
+                    const who = (a.statut === 'Traité' && a.traitePar) ? a.traitePar : a.createdBy;
+                    if(!who) return '';
+                    const label = (a.statut === 'Traité' && a.traitePar) ? 'Traité par' : 'Ajouté par';
+                    return `<span class="card-author" title="${escapeHtml(label + ' ' + who)}">${avatarMarkup(who, 26)}<span class="card-author-name">${escapeHtml(who)}</span></span>`;
+                  })()}
                 </div>
               </div>
             </div>
@@ -1222,7 +1228,10 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     root.innerHTML = html;
     // Récupère les photos des collègues dont une anomalie est affichée.
     const authors = new Set();
-    source.forEach(a=>{ if(a.createdBy) authors.add(a.createdBy); });
+    source.forEach(a=>{
+      if(a.createdBy) authors.add(a.createdBy);
+      if(a.traitePar) authors.add(a.traitePar);
+    });
     if(authors.size) loadAvatarsFor([...authors]);
   }
 
@@ -1437,13 +1446,13 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
               ${photo ? '<button type="button" class="btn" id="accPhotoRemove">Retirer</button>' : ''}
             </div>
             <input type="file" accept="image/*" id="accPhotoInput" style="display:none">
-            <p class="settings-note">La photo reste sur ce téléphone : elle sert uniquement à personnaliser votre pastille de profil.</p>
+            <p class="settings-note">Cette photo accompagne votre nom sur les anomalies que vous ajoutez ou traitez : vos collègues la voient. Enregistrez le nom avant la photo pour que les deux correspondent.</p>
 
             <div class="field">
               <label for="accName">Nom affiché</label>
               <input id="accName" type="text" value="${escapeHtml(name)}" placeholder="ex : J. Martin" maxlength="60" autocapitalize="words">
             </div>
-            <p class="settings-note">Ce nom identifie vos anomalies auprès de l'équipe et alimente le filtre « Les miennes ». Il reste enregistré sur ce téléphone.</p>
+            <p class="settings-note">Ce nom identifie vos anomalies auprès de l'équipe et alimente le filtre « Les miennes ». Les anomalies déjà enregistrées gardent le nom utilisé au moment de leur création.</p>
           </div>
           <div class="sheet-actions">
             <button type="button" class="btn" data-close>Fermer</button>
