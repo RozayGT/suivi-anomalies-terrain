@@ -76,18 +76,23 @@
     --shadow:0 8px 24px rgba(20,25,35,0.12);
   }
   *,*::before,*::after{box-sizing:border-box;}
-  /* Supprime le rectangle bleu affiché par Android au toucher, et la sélection
-     accidentelle de texte lors des appuis sur les éléments interactifs. */
+  /* Supprime le rectangle bleu au toucher et la sélection de texte accidentelle
+     (qui déclenche la recherche contextuelle sur certains Android). */
   html{-webkit-tap-highlight-color:transparent;}
-  button, .category-header, .anomaly-card, .status-pill, .chip, .picker-item,
-  .settings-row, .photo-thumb, .tuto-dots .dot, .stat-pill, .sheet-handle{
+  body{
     -webkit-tap-highlight-color:transparent;
     -webkit-touch-callout:none;
     -webkit-user-select:none;
     user-select:none;
   }
-  /* Les champs de saisie doivent rester sélectionnables normalement. */
-  input, textarea, select{-webkit-user-select:auto; user-select:auto;}
+  /* Seuls les champs où l'on saisit du texte restent sélectionnables.
+     Les menus déroulants et les dates n'en ont pas besoin. */
+  input[type="text"], input[type="search"], input:not([type]), textarea, [contenteditable]{
+    -webkit-user-select:text; user-select:text; -webkit-touch-callout:default;
+  }
+  select, input[type="date"], input[type="file"]{
+    -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+  }
   @media (prefers-reduced-motion: reduce){
     *{animation:none !important; transition:none !important;}
   }
@@ -149,7 +154,7 @@
   .avatar-btn{width:36px; height:36px;}
 
   .sync-row{
-    display:flex; align-items:center; gap:6px; padding:0 16px 12px;
+    display:flex; align-items:center; gap:6px; padding:12px 16px 12px;
     font-size:11.5px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace;
   }
   .sync-dot{width:6px;height:6px;border-radius:50%; background:var(--green); flex-shrink:0;}
@@ -958,7 +963,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '3.2';
+  const APP_VERSION = '3.4';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -2290,6 +2295,18 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
 
   // ---------------- Event wiring ----------------
   function wireStaticEvents(){
+    // Empêche l'apparition des poignées de sélection et du menu contextuel
+    // (à l'origine de la bannière de recherche sur certains Android),
+    // sauf dans les champs où l'on saisit réellement du texte.
+    function isTextField(el){
+      return el && el.closest && el.closest('input[type="text"], input[type="search"], input:not([type]), textarea, [contenteditable]');
+    }
+    document.addEventListener('selectstart', e=>{
+      if(!isTextField(e.target)) e.preventDefault();
+    });
+    document.addEventListener('contextmenu', e=>{
+      if(!isTextField(e.target)) e.preventDefault();
+    });
     $('#fab').addEventListener('click', openCategoryPicker);
     $('#menuBtn').addEventListener('click', openAccount);
     $('#historyBtn').addEventListener('click', ()=>{
