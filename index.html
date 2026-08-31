@@ -151,13 +151,14 @@
   .sync-dot.live{animation:pulse 2.4s ease-in-out infinite;}
 
   /* ---------- Stats ---------- */
-  .stats-bar{display:flex; gap:8px; padding:0 16px 14px;}
+  .stats-bar{display:flex; gap:6px; padding:0 16px 12px;}
   .stat-pill{
-    flex:1; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
-    padding:9px 8px; text-align:center;
+    flex:1; background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:7px 6px; text-align:center;
+    display:flex; align-items:baseline; justify-content:center; gap:5px;
   }
-  .stat-pill .num{font-family:'IBM Plex Mono',monospace; font-size:19px; font-weight:600; display:block;}
-  .stat-pill .lbl{font-size:10.5px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em;}
+  .stat-pill .num{font-family:'IBM Plex Mono',monospace; font-size:15px; font-weight:600;}
+  .stat-pill .lbl{font-size:9.5px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.03em;}
   .stat-pill.red .num{color:var(--red);}
   .stat-pill.amber .num{color:var(--amber);}
   .stat-pill.green .num{color:var(--green);}
@@ -929,7 +930,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '2.9';
+  const APP_VERSION = '3.0';
   const MAX_PHOTOS = 4;
   // Renvoie la liste des identifiants de photos d'une anomalie.
   // Compatible avec les anciennes anomalies (une seule photo, stockée sous la clé = id de l'anomalie).
@@ -1165,7 +1166,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       });
     }
     const avatar = $('#menuBtn');
-    if(avatar) avatar.textContent = initialOf(profile.name);
+    paintAvatar(avatar, profile.name);
     updateThemePill();
     const histBtn = $('#historyBtn');
     if(histBtn){
@@ -1219,11 +1220,59 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     return n ? n.charAt(0).toUpperCase() : '?';
   }
 
-  // Écran ouvert par la pastille de profil.
+  // ---- Photo de profil (locale à cet appareil, comme le nom) ----
+  const AVATAR_KEY = 'anomalies_avatar';
+  function getAvatarPhoto(){
+    try{ return localStorage.getItem(AVATAR_KEY) || ''; }catch(e){ return ''; }
+  }
+  function setAvatarPhoto(dataUrl){
+    try{
+      if(dataUrl) localStorage.setItem(AVATAR_KEY, dataUrl);
+      else localStorage.removeItem(AVATAR_KEY);
+    }catch(e){ /* ignore */ }
+  }
+  // Recadrage carré centré puis réduction : une photo d'avatar reste légère.
+  async function makeAvatarFromFile(file, size){
+    size = size || 256;
+    let source, w, h;
+    if('createImageBitmap' in window){
+      let bitmap;
+      try{ bitmap = await createImageBitmap(file, {imageOrientation:'from-image'}); }
+      catch(e){ bitmap = await createImageBitmap(file); }
+      source = bitmap; w = bitmap.width; h = bitmap.height;
+    }else{
+      const img = await loadImageFromFile(file);
+      source = img; w = img.naturalWidth; h = img.naturalHeight;
+    }
+    const side = Math.min(w, h);
+    const sx = Math.round((w - side) / 2);
+    const sy = Math.round((h - side) / 2);
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    canvas.getContext('2d').drawImage(source, sx, sy, side, side, 0, 0, size, size);
+    return canvas.toDataURL('image/jpeg', 0.78);
+  }
+  // Applique la photo (ou l'initiale) à un élément rond.
+  function paintAvatar(el, name){
+    if(!el) return;
+    const photo = getAvatarPhoto();
+    if(photo){
+      el.textContent = '';
+      el.style.backgroundImage = `url(${photo})`;
+      el.style.backgroundSize = 'cover';
+      el.style.backgroundPosition = 'center';
+    }else{
+      el.style.backgroundImage = '';
+      el.textContent = initialOf(name);
+    }
+  }
+
+  // Écran ouvert par la pastille de profil : identité uniquement.
   function openAccount(){
     modalOpen = true;
     lockBodyScroll();
     const name = profile.name || '';
+    const photo = getAvatarPhoto();
     $('#modalRoot').innerHTML = `
       <div class="overlay" id="overlayEl">
         <div class="sheet">
@@ -1237,28 +1286,25 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
 
             <p class="settings-group-title">Identité</p>
             <div class="account-card">
-              <div class="avatar-lg">${escapeHtml(initialOf(name))}</div>
+              <div class="avatar-lg" id="accAvatar"${photo ? ` style="background-image:url(${photo});background-size:cover;background-position:center"` : ''}>${photo ? '' : escapeHtml(initialOf(name))}</div>
               <div class="who">
                 <strong>${name ? escapeHtml(name) : 'Nom non renseigné'}</strong>
                 <span>${name ? 'Apparaît sur vos ajouts et traitements' : 'À renseigner pour identifier vos ajouts'}</span>
               </div>
             </div>
 
+            <div class="photo-actions">
+              <button type="button" class="btn" id="accPhotoBtn">${photo ? '🖼️ Changer la photo' : '🖼️ Ajouter une photo'}</button>
+              ${photo ? '<button type="button" class="btn" id="accPhotoRemove">Retirer</button>' : ''}
+            </div>
+            <input type="file" accept="image/*" id="accPhotoInput" style="display:none">
+            <p class="settings-note">La photo reste sur ce téléphone : elle sert uniquement à personnaliser votre pastille de profil.</p>
+
             <div class="field">
               <label for="accName">Nom affiché</label>
               <input id="accName" type="text" value="${escapeHtml(name)}" placeholder="ex : J. Martin" maxlength="60" autocapitalize="words">
             </div>
             <p class="settings-note">Ce nom identifie vos anomalies auprès de l'équipe et alimente le filtre « Les miennes ». Il reste enregistré sur ce téléphone.</p>
-
-            <p class="settings-group-title">Notifications</p>
-            <div class="settings-row static">
-              <span class="label">Notifications</span>
-              <button type="button" class="switch" id="accNotifSwitch" role="switch"
-                      aria-checked="${notificationsEnabled() ? 'true' : 'false'}"
-                      data-on="${notificationsEnabled() ? 'true' : 'false'}"
-                      aria-label="Activer les notifications"></button>
-            </div>
-            <p class="settings-note">Être averti sur ce téléphone dès qu'un collègue ajoute une anomalie, même application fermée.</p>
           </div>
           <div class="sheet-actions">
             <button type="button" class="btn" data-close>Fermer</button>
@@ -1270,25 +1316,37 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') closeModal(); });
     $('#navToSettings').addEventListener('click', ()=>{ closeModal(); openSettings(); });
 
-    const notifSwitch = $('#accNotifSwitch');
-    notifSwitch.addEventListener('click', async ()=>{
-      if(notifSwitch.disabled) return;
-      notifSwitch.disabled = true;
-      const wasOn = notificationsEnabled();
-      if(wasOn) await disableNotifications();
-      else await enableNotifications();
-      // On reste sur l'écran : seul l'interrupteur change d'état.
-      const nowOn = notificationsEnabled();
-      notifSwitch.dataset.on = nowOn ? 'true' : 'false';
-      notifSwitch.setAttribute('aria-checked', nowOn ? 'true' : 'false');
-      notifSwitch.disabled = false;
+    $('#accPhotoBtn').addEventListener('click', ()=> $('#accPhotoInput').click());
+    $('#accPhotoInput').addEventListener('change', async (e)=>{
+      const file = e.target.files[0];
+      e.target.value = '';
+      if(!file) return;
+      try{
+        const dataUrl = await makeAvatarFromFile(file, 256);
+        setAvatarPhoto(dataUrl);
+        haptic(12);
+        render();
+        closeModal();
+        openAccount(); // rouvre l'écran avec la nouvelle photo
+      }catch(err){
+        showToast("Impossible de traiter cette photo");
+      }
     });
+    const removeBtn = $('#accPhotoRemove');
+    if(removeBtn){
+      removeBtn.addEventListener('click', ()=>{
+        setAvatarPhoto('');
+        render();
+        closeModal();
+        openAccount();
+      });
+    }
 
     $('#accSave').addEventListener('click', ()=>{
       saveProfile($('#accName').value);
       closeModal();
       render();
-      showToast('Nom enregistré');
+      showToast('Profil enregistré');
     });
   }
 
@@ -1309,6 +1367,14 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
 
             <div class="settings-group">
               <p class="settings-group-title">Application</p>
+              <div class="settings-row static">
+                <span class="label">Notifications</span>
+                <button type="button" class="switch" id="setNotifSwitch" role="switch"
+                        aria-checked="${notificationsEnabled() ? 'true' : 'false'}"
+                        data-on="${notificationsEnabled() ? 'true' : 'false'}"
+                        aria-label="Activer les notifications"></button>
+              </div>
+              <p class="settings-note">Être averti sur ce téléphone dès qu'un collègue ajoute une anomalie, même application fermée.</p>
               <div class="settings-row static">
                 <span class="label">Tutoriel</span>
                 <button type="button" class="row-btn" id="setTutorial">Revoir</button>
@@ -1345,6 +1411,18 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     `;
     $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') closeModal(); });
     $('#navToAccount').addEventListener('click', ()=>{ closeModal(); openAccount(); });
+    const notifSwitch = $('#setNotifSwitch');
+    notifSwitch.addEventListener('click', async ()=>{
+      if(notifSwitch.disabled) return;
+      notifSwitch.disabled = true;
+      if(notificationsEnabled()) await disableNotifications();
+      else await enableNotifications();
+      // On reste sur l'écran : seul l'interrupteur change d'état.
+      const nowOn = notificationsEnabled();
+      notifSwitch.dataset.on = nowOn ? 'true' : 'false';
+      notifSwitch.setAttribute('aria-checked', nowOn ? 'true' : 'false');
+      notifSwitch.disabled = false;
+    });
     $('#setTutorial').addEventListener('click', ()=>{ closeModal(); openTutorial(false); });
     $('#setAccount').addEventListener('click', ()=>{ closeModal(); openAccount(); });
     $('#setExport').addEventListener('click', ()=>{ exportCSV(); });
