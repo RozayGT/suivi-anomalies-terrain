@@ -501,11 +501,7 @@
   .lightbox-dots .dot.active{background:#fff;}
 
   .tuto-icon{font-size:52px; text-align:center; margin:6px 0 14px; line-height:1;}
-  .tuto-title{text-align:center; margin-bottom:6px;}
-  .tuto-step-count{
-    text-align:center; font-size:11.5px; color:var(--text-faint); margin:0 0 16px;
-    font-family:'IBM Plex Mono',monospace; letter-spacing:0.04em;
-  }
+  .tuto-title{text-align:center; margin-bottom:16px;}
   .tuto-text{
     font-size:14.5px; line-height:1.65; color:var(--text); text-align:center;
     margin:0 2px 22px; white-space:pre-line;
@@ -984,7 +980,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '3.8';
+  const APP_VERSION = '3.9';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -1611,7 +1607,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     {
       icon: '\u{1F4CB}',
       title: "L'\u00e9cran d'accueil",
-      text: "Les anomalies sont regroup\u00e9es par type d'\u00e9quipement : Per\u00e7age/Insert, Aiguille, Signaux\u2026 Touchez une cat\u00e9gorie pour la d\u00e9plier ; celles sans anomalie restent gris\u00e9es.\n\nSur chaque anomalie, la bande de couleur \u00e0 gauche donne le statut d'un coup d'\u0153il : rouge non trait\u00e9, orange en cours, vert trait\u00e9. \u00c0 droite, la priorit\u00e9 et le num\u00e9ro d'ordre dans la cat\u00e9gorie."
+      text: "Les anomalies sont regroup\u00e9es par type d'\u00e9quipement : Per\u00e7age/Insert, Aiguille, Signaux\u2026 Touchez une cat\u00e9gorie pour la d\u00e9plier ; celles sans anomalie restent gris\u00e9es.\n\nSur chaque anomalie, la bande de couleur \u00e0 gauche donne le statut d'un coup d'\u0153il : rouge non trait\u00e9, orange en cours, vert trait\u00e9. \u00c0 droite : la priorit\u00e9, le num\u00e9ro d'ordre dans la cat\u00e9gorie, et la personne concern\u00e9e \u2014 celle qui a cr\u00e9\u00e9 l'anomalie, ou celle qui l'a trait\u00e9e une fois le travail fait."
     },
     {
       icon: '\u2795',
@@ -1651,7 +1647,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     {
       icon: '\u2699\uFE0F',
       title: 'Compte et r\u00e9glages',
-      text: "Quatre boutons en haut de l'\u00e9cran : l'historique, le soleil ou la lune pour changer d'apparence d'un geste, l'engrenage des r\u00e9glages, et votre pastille de profil.\n\nLe profil sert \u00e0 votre nom affich\u00e9 et \u00e0 votre photo. Les r\u00e9glages regroupent le mode sombre, les notifications, l'export CSV, la recherche de mise \u00e0 jour et ce tutoriel. Les fl\u00e8ches \u2039 et \u203a font passer d'un \u00e9cran \u00e0 l'autre.\n\nBonne utilisation !"
+      text: "Quatre boutons en haut de l'\u00e9cran : l'historique, le soleil ou la lune pour changer d'apparence d'un geste, l'engrenage des r\u00e9glages, et votre pastille de profil.\n\nLe profil sert \u00e0 votre nom affich\u00e9 et \u00e0 votre photo : les deux apparaissent aupr\u00e8s de vos coll\u00e8gues sur les anomalies que vous ajoutez ou traitez. Les r\u00e9glages regroupent le mode sombre, les notifications, l'export CSV, la recherche de mise \u00e0 jour et ce tutoriel. Les fl\u00e8ches \u2039 et \u203a font passer d'un \u00e9cran \u00e0 l'autre.\n\nBonne utilisation !"
     },
   ];
 
@@ -1680,7 +1676,6 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
               <div class="tuto-slide${direction ? ' slide-' + direction : ''}">
                 <div class="tuto-icon">${s.icon}</div>
                 <h2 class="tuto-title">${escapeHtml(s.title)}</h2>
-                <p class="tuto-step-count">Étape ${step + 1} sur ${total}</p>
                 <p class="tuto-text">${escapeHtml(s.text)}</p>
               </div>
               <div class="tuto-dots">
