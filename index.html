@@ -237,27 +237,33 @@
   .card-band.non-traite{background:var(--red-solid);}
   .card-band.en-cours{background:var(--amber-solid);}
   .card-band.traite{background:var(--green-solid);}
-  .card-body{display:flex; gap:10px; flex:1; min-width:0; padding:11px 12px;}
-  .card-main{flex:1; min-width:0;}
-  .card-side{
-    display:flex; flex-direction:column; align-items:stretch; gap:5px;
-    flex-shrink:0; text-align:center;
-  }
+  .card-body{flex:1; min-width:0; padding:11px 12px;}
+  /* Ligne d'en-tête de la carte : numéro d'ordre, priorité, badge NOUVEAU.
+     Remplace l'ancienne colonne de droite, qui empilait jusqu'à cinq éléments
+     et imposait à elle seule la hauteur de la carte. */
+  .card-top{display:flex; align-items:center; gap:8px; margin-bottom:6px;}
   .card-order{
-    background:var(--panel); border:1px solid var(--line); border-radius:6px;
-    padding:2px 0; font-family:'IBM Plex Mono',monospace; font-size:11.5px;
-    color:var(--text-dim);
+    font-family:'IBM Plex Mono',monospace; font-size:11.5px;
+    color:var(--text-dim); flex-shrink:0;
   }
-  .priority-chip{font-size:10.5px; padding:3px 8px; border-radius:6px; text-transform:uppercase; letter-spacing:0.03em; white-space:nowrap;}
-  .priority-chip.p-faible{background:transparent; border:1px solid var(--line); color:var(--text-dim);}
-  .priority-chip.p-moyenne{background:var(--accent-dim); color:var(--accent);}
-  .priority-chip.p-elevee{background:var(--violet-bg); color:var(--violet);}
+  /* La priorité passe en pastille + texte, sans fond : la couleur pleine reste
+     réservée au statut (bande de gauche), pour n'avoir qu'un seul code couleur fort. */
+  .priority-chip{
+    display:inline-flex; align-items:center; gap:5px; flex-shrink:0;
+    font-size:11px; white-space:nowrap;
+  }
+  .priority-chip::before{content:''; width:5px; height:5px; border-radius:50%; background:currentColor;}
+  .priority-chip.p-faible{color:var(--text-faint);}
+  .priority-chip.p-moyenne{color:var(--accent);}
+  .priority-chip.p-elevee{color:var(--violet);}
+  .card-top .new-badge{margin-left:auto; flex-shrink:0;}
   .card-desc{
     font-size:13.5px; color:var(--text); line-height:1.4; margin-bottom:5px;
     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
   }
   .card-meta{font-size:11.5px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace; margin-bottom:9px;}
-  .card-bottom{display:flex; align-items:center; gap:10px;}
+  .card-bottom{display:flex; align-items:center; gap:10px; min-width:0;}
+  .card-bottom .status-pill{flex-shrink:0;}
   .status-pill{
     display:flex; align-items:center; gap:5px; font-size:12px; cursor:pointer;
     padding:7px 12px 7px 9px; border-radius:999px; background:var(--panel); border:1px solid var(--line);
@@ -271,15 +277,18 @@
   .traite-par-row{display:flex; align-items:center; gap:9px;}
   .traite-par-row input{flex:1; min-width:0;}
   .traite-par-row .mini-avatar{width:34px; height:34px; font-size:14px;}
-  .card-photos{font-size:11.5px; color:var(--text-faint);}
+  .card-photos{font-size:11.5px; color:var(--text-faint); white-space:nowrap; flex-shrink:0;}
   .mini-avatar{
     display:inline-flex; align-items:center; justify-content:center; border-radius:50%;
     background:var(--accent); color:#0d1116; font-family:'Oswald',sans-serif; font-weight:600;
     flex-shrink:0; overflow:hidden;
   }
-  .card-author{display:flex; flex-direction:column; align-items:center; gap:3px; margin-top:2px;}
+  .card-author{
+    display:flex; flex-direction:row; align-items:center; gap:6px;
+    margin-left:auto; min-width:0;
+  }
   .card-author-name{
-    font-size:9.5px; color:var(--text-faint); max-width:56px; text-align:center;
+    font-size:10px; color:var(--text-faint); max-width:64px;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
 
@@ -998,7 +1007,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '4.2';
+  const APP_VERSION = '4.3';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -1186,25 +1195,25 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
           cardsHtml = visibleItems.slice().sort((a,b)=> (b.createdAt||'').localeCompare(a.createdAt||'')).map(a=>{
             const isNew = a.createdAt && (Date.now() - new Date(a.createdAt).getTime()) < 24*60*60*1000;
             const photoCount = getPhotoIds(a).length;
+            // Anomalies antérieures à la 4.1 : pas d'identifiant, donc pas de numéro.
+            const ord = orderOf(a);
             const bandClass = currentView === 'history' ? 'traite' : statusClass(a.statut);
             return `
             <div class="anomaly-card" data-cat="${cat.id}" data-id="${a.id}">
               <span class="card-band ${bandClass}"></span>
               <div class="card-body">
-                <div class="card-main">
-                  <div class="card-desc">${escapeHtml(a.description||'')}</div>
-                  <div class="card-meta">${escapeHtml(a.voie||'—')} · PK ${escapeHtml(a.pk||'—')} · ${escapeHtml(a.equipement||'—')}</div>
-                  <div class="card-bottom">
-                    ${currentView === 'history'
-                      ? `<span class="status-pill traite" style="cursor:default"><span class="dot"></span>Archivée</span>`
-                      : `<span class="status-pill ${statusClass(a.statut)}"><span class="dot"></span>${escapeHtml(a.statut)}<span class="cycle-hint">⟳</span></span>`}
-                    ${photoCount ? `<span class="card-photos">${photoCount > 1 ? photoCount + ' photos' : '1 photo'}</span>` : ''}
-                  </div>
-                </div>
-                <div class="card-side">
+                <div class="card-top">
+                  ${/\d/.test(ord) ? `<span class="card-order" title="Numéro dans la catégorie">N° ${escapeHtml(ord)}</span>` : ''}
                   <span class="priority-chip ${priorityClass(a.priorite)}">${escapeHtml(a.priorite)}</span>
-                  <span class="card-order" title="Numéro dans la catégorie">${escapeHtml(orderOf(a))}</span>
                   ${isNew ? '<span class="new-badge">NOUVEAU</span>' : ''}
+                </div>
+                <div class="card-desc">${escapeHtml(a.description||'')}</div>
+                <div class="card-meta">${escapeHtml(a.voie||'—')} · PK ${escapeHtml(a.pk||'—')} · ${escapeHtml(a.equipement||'—')}</div>
+                <div class="card-bottom">
+                  ${currentView === 'history'
+                    ? `<span class="status-pill traite" style="cursor:default"><span class="dot"></span>Archivée</span>`
+                    : `<span class="status-pill ${statusClass(a.statut)}"><span class="dot"></span>${escapeHtml(a.statut)}<span class="cycle-hint">⟳</span></span>`}
+                  ${photoCount ? `<span class="card-photos">${photoCount > 1 ? photoCount + ' photos' : '1 photo'}</span>` : ''}
                   ${(()=>{
                     // Traitée : on montre qui l'a traitée. Sinon, qui l'a créée.
                     const treated = a.statut === 'Traité' && a.traitePar;
@@ -1212,7 +1221,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
                     const uid = treated ? (a.traiteParUid || '') : (a.createdByUid || '');
                     if(!who) return '';
                     const label = treated ? 'Traité par' : 'Ajouté par';
-                    return `<span class="card-author" title="${escapeHtml(label + ' ' + who)}">${avatarMarkup({uid, name: who}, 26)}<span class="card-author-name">${escapeHtml(who)}</span></span>`;
+                    return `<span class="card-author" title="${escapeHtml(label + ' ' + who)}">${avatarMarkup({uid, name: who}, 24)}<span class="card-author-name">${escapeHtml(who)}</span></span>`;
                   })()}
                 </div>
               </div>
