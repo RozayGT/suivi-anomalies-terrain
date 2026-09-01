@@ -998,7 +998,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '4.1';
+  const APP_VERSION = '4.2';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -1106,9 +1106,12 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   function matchesFilters(a){
     if(activeFilter==='mine'){
       // L'identifiant prime : il reste valable même après un changement de nom.
-      const byUid = currentUid && (a.createdByUid === currentUid || a.traiteParUid === currentUid);
+      const byUid = currentUid && (a.createdByUid === currentUid
+        || (a.statut === 'Traité' && a.traiteParUid === currentUid));
       const name = profile.name;
-      const byName = name && (a.createdBy===name || a.updatedBy===name || a.traitePar===name);
+      // Uniquement les anomalies que vous avez créées ou traitées.
+      // Une simple modification (changement de statut) ne suffit pas.
+      const byName = name && (a.createdBy===name || (a.statut==='Traité' && a.traitePar===name));
       if(!byUid && !byName) return false;
     }else if(activeFilter==='new'){
       if(!newBatchIds.has(a.id)) return false;
@@ -1850,8 +1853,8 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
               </div>
             </div>
             <div class="field">
-              <label for="f_desc">Description de l'anomalie *</label>
-              <textarea id="f_desc" required placeholder="Décrivez ce qui a été constaté sur le terrain">${escapeHtml(v.description)}</textarea>
+              <label for="f_desc">Description de l'anomalie / action à réaliser *</label>
+              <textarea id="f_desc" required placeholder="Ce qui a été constaté sur le terrain, et ce qu'il y a à faire">${escapeHtml(v.description)}</textarea>
             </div>
             <div class="field">
               <label>Photos <span style="text-transform:none; color:var(--text-faint);">(${MAX_PHOTOS} max)</span></label>
