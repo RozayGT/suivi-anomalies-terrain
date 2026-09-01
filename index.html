@@ -772,6 +772,44 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     try{ localStorage.setItem('anomalies_profile', JSON.stringify(profile)); }catch(e){ /* ignore */ }
   }
 
+  // Report du nom sur les anomalies déjà enregistrées.
+  // Sans lui, changer de nom laisse les fiches à l'ancien nom et vide le filtre
+  // « Les miennes » : la correspondance par identifiant d'appareil ne joue pas pour
+  // les anomalies créées avant son introduction, ni après une réinstallation.
+  // Critère de propriété : l'identifiant d'appareil s'il correspond, sinon l'ancien nom exact.
+  // On réassocie l'identifiant au passage, pour que les renommages suivants n'en dépendent plus.
+  function renameMyAnomalies(previousName, newName){
+    const from = (previousName || '').trim();
+    const to = (newName || '').trim();
+    if(!to || from === to) return 0;
+    // « Anonyme » est le nom par défaut de tout le monde : jamais un critère de propriété.
+    const byName = from && from !== 'Anonyme';
+
+    const touched = [];
+    anomalies.forEach(a=>{
+      const patch = {};
+      const mineCreated = (currentUid && a.createdByUid === currentUid)
+        || (byName && a.createdBy === from);
+      if(mineCreated && a.createdBy !== to){
+        patch.createdBy = to;
+        if(currentUid) patch.createdByUid = currentUid;
+      }
+      const mineTreated = a.traitePar
+        && ((currentUid && a.traiteParUid === currentUid) || (byName && a.traitePar === from));
+      if(mineTreated && a.traitePar !== to){
+        patch.traitePar = to;
+        if(currentUid) patch.traiteParUid = currentUid;
+      }
+      if(Object.keys(patch).length){
+        Object.assign(a, patch);   // effet immédiat à l'écran, avant même l'aller-retour réseau
+        touched.push(a);
+      }
+    });
+    // Écritures non attendues : hors ligne, elles partiront au retour du réseau.
+    touched.forEach(a=> saveAnomalyDoc(a));
+    return touched.length;
+  }
+
   function getTheme(){
     try{ return localStorage.getItem('anomalies_theme') === 'light' ? 'light' : 'dark'; }catch(e){ return 'dark'; }
   }
@@ -1007,7 +1045,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '4.3';
+  const APP_VERSION = '4.4';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -1494,7 +1532,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
               <label for="accName">Nom affiché</label>
               <input id="accName" type="text" value="${escapeHtml(name)}" placeholder="ex : J. Martin" maxlength="60" autocapitalize="words">
             </div>
-            <p class="settings-note">Ce nom identifie vos anomalies auprès de l'équipe et alimente le filtre « Les miennes ». Les anomalies déjà enregistrées gardent le nom utilisé au moment de leur création.</p>
+            <p class="settings-note">Ce nom identifie vos anomalies auprès de l'équipe et alimente le filtre « Les miennes ». Si vous le modifiez, vos anomalies déjà enregistrées prennent le nouveau nom.</p>
           </div>
           <div class="sheet-actions">
             <button type="button" class="btn" data-close>Fermer</button>
@@ -1533,13 +1571,19 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }
 
     $('#accSave').addEventListener('click', ()=>{
+      const previousName = profile.name || '';
       saveProfile($('#accName').value);
       // Le nom sert de clé à la photo partagée : on la republie sous le nouveau nom.
       const myPhoto = getAvatarPhoto();
       if(myPhoto) setAvatarPhoto(myPhoto);
+      // Puis on reporte le nom sur les anomalies existantes, pour que les fiches
+      // et le filtre « Les miennes » suivent immédiatement.
+      const moved = renameMyAnomalies(previousName, profile.name);
       closeModal();
       render();
-      showToast('Profil enregistré');
+      showToast(moved
+        ? `Profil enregistré — ${moved} anomalie${moved > 1 ? 's' : ''} à votre nouveau nom`
+        : 'Profil enregistré');
     });
   }
 
@@ -1806,9 +1850,11 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     `;
     $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') closeModal(); });
     $('#cancelName').addEventListener('click', closeModal);
-    $('#saveName').addEventListener('click', async ()=>{
+    $('#saveName').addEventListener('click', ()=>{
       const v = $('#nameInput').value;
-      await saveProfile(v);
+      const previousName = profile.name || '';
+      saveProfile(v);
+      renameMyAnomalies(previousName, profile.name);
       closeModal();
       showToast('Nom enregistré');
     });
