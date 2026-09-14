@@ -84,6 +84,13 @@ self.addEventListener('fetch', (event) => {
 // ---------------------------------------------------------------
 
 const FIREBASE_PROJECT_ID = 'suivi-anomalies-terrain-83472';
+const FIRESTORE_BASE =
+  `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
+
+// Au réveil du téléphone le réseau est souvent lent. La recherche de l'anomalie
+// sert seulement à préciser le texte : elle ne doit jamais retarder l'affichage.
+const LOOKUP_TIMEOUT_MS = 3000;
+
 const CATEGORY_LABELS = {
   'percage-insert': 'Perçage / Insert',
   'aiguille': 'Aiguille',
@@ -98,13 +105,16 @@ const CATEGORY_LABELS = {
 };
 
 // Le message push n'a pas de contenu : on va chercher la dernière anomalie
-// pour composer une notification précise.
+// pour composer une notification précise. Passé le délai, on affiche un texte
+// générique plutôt que de faire attendre l'utilisateur.
 async function buildNotificationText() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LOOKUP_TIMEOUT_MS);
   try {
-    const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery`;
-    const res = await fetch(url, {
+    const res = await fetch(`${FIRESTORE_BASE}:runQuery`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
         structuredQuery: {
           from: [{ collectionId: 'anomalies' }],
@@ -129,6 +139,8 @@ async function buildNotificationText() {
     };
   } catch (e) {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -157,5 +169,56 @@ self.addEventListener('notificationclick', (event) => {
       if ('focus' in client) return client.focus();
     }
     if (self.clients.openWindow) return self.clients.openWindow('./');
+  })());
+});
+
+// ---------------------------------------------------------------
+// Renouvellement d'abonnement
+// ---------------------------------------------------------------
+// Les navigateurs renouvellent parfois l'adresse d'abonnement d'eux-mêmes.
+// L'application répare cela à son prochain démarrage, mais si l'appareil ne
+// l'ouvre pas pendant plusieurs jours il ne reçoit plus rien entre-temps.
+// On réenregistre donc immédiatement, sans attendre l'ouverture.
+
+// Doit produire exactement le même identifiant que subKeyId() dans index.html.
+function subKeyId(endpoint) {
+  let h = 0;
+  for (let i = 0; i < endpoint.length; i++) { h = (h * 31 + endpoint.charCodeAt(i)) | 0; }
+  return 'sub' + Math.abs(h).toString(36) + '_' + endpoint.slice(-12).replace(/[^a-zA-Z0-9]/g, '');
+}
+
+async function registerSubscription(endpoint) {
+  // Le nom du propriétaire est inconnu ici (pas d'accès au profil) : on le laisse
+  // vide, l'exclusion « ne pas se notifier soi-même » repose sur l'adresse.
+  await fetch(`${FIRESTORE_BASE}/pushSubs/${subKeyId(endpoint)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fields: {
+        endpoint: { stringValue: endpoint },
+        owner: { stringValue: '' },
+        createdAt: { stringValue: new Date().toISOString() },
+      },
+    }),
+  });
+}
+
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil((async () => {
+    try {
+      // La nouvelle souscription est parfois fournie par l'événement lui-même.
+      let sub = event.newSubscription;
+      if (!sub) {
+        const old = event.oldSubscription;
+        const key = old && old.options && old.options.applicationServerKey;
+        if (!key) return;
+        sub = await self.registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: key,
+        });
+      }
+      const endpoint = sub && sub.endpoint;
+      if (endpoint) await registerSubscription(endpoint);
+    } catch (e) { /* l'application réparera au prochain démarrage */ }
   })());
 });

@@ -927,6 +927,17 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     for(let i=0;i<endpoint.length;i++){ h = (h*31 + endpoint.charCodeAt(i)) | 0; }
     return 'sub' + Math.abs(h).toString(36) + '_' + endpoint.slice(-12).replace(/[^a-zA-Z0-9]/g,'');
   }
+  // Enregistrement de l'abonnement : écriture non attendue, comme partout ailleurs
+  // dans l'application. C'est ce qui bloquait l'interrupteur plusieurs secondes.
+  function savePushSubDoc(endpoint){
+    try{
+      return writeWithoutWaitingServer(setDoc(doc(db, PUSHSUBS_COL, subKeyId(endpoint)), {
+        endpoint,
+        owner: profile.name || '',
+        createdAt: new Date().toISOString(),
+      }));
+    }catch(e){ console.error(e); return Promise.resolve(false); }
+  }
   function notificationsEnabled(){
     try{ return localStorage.getItem('anomalies_push') === 'on'; }catch(e){ return false; }
   }
@@ -954,13 +965,11 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
         });
       }
       const json = sub.toJSON();
-      await setDoc(doc(db, PUSHSUBS_COL, subKeyId(json.endpoint)), {
-        endpoint: json.endpoint,
-        owner: profile.name || '',
-        createdAt: new Date().toISOString(),
-      });
       try{ localStorage.setItem('anomalies_push', 'on'); }catch(e){}
       mySubEndpoint = json.endpoint || '';
+      // L'interrupteur bascule tout de suite. Si l'écriture n'aboutit pas, le
+      // réenregistrement au prochain démarrage la rattrapera.
+      savePushSubDoc(json.endpoint);
       showToast('Notifications activées ✓');
       return true;
     }catch(e){
@@ -975,7 +984,8 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       const sub = await reg.pushManager.getSubscription();
       if(sub){
         const json = sub.toJSON();
-        try{ await deleteDoc(doc(db, PUSHSUBS_COL, subKeyId(json.endpoint))); }catch(e){}
+        // Suppression non attendue, pour la même raison qu'à l'activation.
+        try{ writeWithoutWaitingServer(deleteDoc(doc(db, PUSHSUBS_COL, subKeyId(json.endpoint)))); }catch(e){}
         await sub.unsubscribe();
       }
     }catch(e){ /* ignore */ }
@@ -1000,12 +1010,29 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   // Identifiant technique de l'abonnement de cet appareil : il sert à ne pas
   // s'envoyer de notification à soi-même, indépendamment du nom affiché.
   let mySubEndpoint = '';
+  // Au démarrage, on revalide l'abonnement. Les navigateurs renouvellent
+  // périodiquement l'adresse d'abonnement, et le Worker supprime les fiches dont
+  // l'adresse est morte. Sans ce contrôle, l'appareil ne reçoit plus jamais rien
+  // alors que l'interrupteur reste affiché sur « activé ».
   async function refreshMySubEndpoint(){
     if(!pushSupported()){ mySubEndpoint = ''; return; }
     try{
       const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
+      let sub = await reg.pushManager.getSubscription();
+      const wanted = notificationsEnabled() && Notification.permission === 'granted';
+      if(!sub && wanted){
+        // L'abonnement a disparu : on le recrée sans rien demander à l'utilisateur.
+        try{
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+          });
+        }catch(e){ /* on réessaiera au prochain démarrage */ }
+      }
       mySubEndpoint = sub ? (sub.toJSON().endpoint || '') : '';
+      // Republication systématique : seul moyen de réparer une fiche supprimée
+      // côté serveur, ou une écriture qui n'était jamais partie. Non attendue.
+      if(mySubEndpoint && wanted) savePushSubDoc(mySubEndpoint);
     }catch(e){ mySubEndpoint = ''; }
   }
 
@@ -1045,7 +1072,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '4.4';
+  const APP_VERSION = '4.5';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -1579,6 +1606,9 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       // Puis on reporte le nom sur les anomalies existantes, pour que les fiches
       // et le filtre « Les miennes » suivent immédiatement.
       const moved = renameMyAnomalies(previousName, profile.name);
+      // Le Worker se sert du nom enregistré avec l'abonnement pour ne pas vous
+      // notifier de vos propres ajouts : il doit suivre le renommage.
+      if(mySubEndpoint && notificationsEnabled()) savePushSubDoc(mySubEndpoint);
       closeModal();
       render();
       showToast(moved
