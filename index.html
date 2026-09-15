@@ -1092,7 +1092,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '4.9';
+  const APP_VERSION = '5.0';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -1791,8 +1791,11 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     let step = 0;
     const total = TUTORIAL_STEPS.length;
 
-    function finish(){
-      markTutorialSeen();
+    // « Terminer » et « Passer » valent renoncement explicite : on retient.
+    // La croix et l'appui à l'extérieur sont des réflexes de fermeture : on ne
+    // retient pas, le tutoriel se represente au prochain lancement.
+    function finish(remember){
+      if(remember) markTutorialSeen();
       closeModal();
       if(isFirstRun && !profile.name){
         setTimeout(()=> openProfileModal(), 300);
@@ -1823,15 +1826,17 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
           </div>
         </div>
       `;
-      $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') finish(); });
-      $('#tutoCloseX').addEventListener('click', finish);
+      $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') finish(false); });
+      // Arrow function obligatoire : passer finish directement transmettrait
+      // l'objet événement comme argument, qui serait interprété comme « retenir ».
+      $('#tutoCloseX').addEventListener('click', ()=> finish(false));
       $('#tutoSkip').addEventListener('click', ()=>{
-        if(step === 0) finish();
+        if(step === 0) finish(true);
         else goToStep(step - 1);
       });
       $('#tutoNext').addEventListener('click', ()=>{
         if(step < total - 1) goToStep(step + 1);
-        else finish();
+        else finish(true);
       });
       // Points de progression cliquables
       $('#modalRoot').querySelectorAll('.tuto-dots .dot').forEach(d=>{
