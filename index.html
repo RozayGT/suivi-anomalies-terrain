@@ -237,27 +237,33 @@
   .card-band.non-traite{background:var(--red-solid);}
   .card-band.en-cours{background:var(--amber-solid);}
   .card-band.traite{background:var(--green-solid);}
-  .card-body{display:flex; gap:10px; flex:1; min-width:0; padding:11px 12px;}
-  .card-main{flex:1; min-width:0;}
-  .card-side{
-    display:flex; flex-direction:column; align-items:stretch; gap:5px;
-    flex-shrink:0; text-align:center;
-  }
+  .card-body{flex:1; min-width:0; padding:11px 12px;}
+  /* Ligne d'en-tête de la carte : numéro d'ordre, priorité, badge NOUVEAU.
+     Remplace l'ancienne colonne de droite, qui empilait jusqu'à cinq éléments
+     et imposait à elle seule la hauteur de la carte. */
+  .card-top{display:flex; align-items:center; gap:8px; margin-bottom:6px;}
   .card-order{
-    background:var(--panel); border:1px solid var(--line); border-radius:6px;
-    padding:2px 0; font-family:'IBM Plex Mono',monospace; font-size:11.5px;
-    color:var(--text-dim);
+    font-family:'IBM Plex Mono',monospace; font-size:11.5px;
+    color:var(--text-dim); flex-shrink:0;
   }
-  .priority-chip{font-size:10.5px; padding:3px 8px; border-radius:6px; text-transform:uppercase; letter-spacing:0.03em; white-space:nowrap;}
-  .priority-chip.p-faible{background:transparent; border:1px solid var(--line); color:var(--text-dim);}
-  .priority-chip.p-moyenne{background:var(--accent-dim); color:var(--accent);}
-  .priority-chip.p-elevee{background:var(--violet-bg); color:var(--violet);}
+  /* La priorité passe en pastille + texte, sans fond : la couleur pleine reste
+     réservée au statut (bande de gauche), pour n'avoir qu'un seul code couleur fort. */
+  .priority-chip{
+    display:inline-flex; align-items:center; gap:5px; flex-shrink:0;
+    font-size:11px; white-space:nowrap;
+  }
+  .priority-chip::before{content:''; width:5px; height:5px; border-radius:50%; background:currentColor;}
+  .priority-chip.p-faible{color:var(--text-faint);}
+  .priority-chip.p-moyenne{color:var(--accent);}
+  .priority-chip.p-elevee{color:var(--violet);}
+  .card-top .new-badge{margin-left:auto; flex-shrink:0;}
   .card-desc{
     font-size:13.5px; color:var(--text); line-height:1.4; margin-bottom:5px;
     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
   }
   .card-meta{font-size:11.5px; color:var(--text-faint); font-family:'IBM Plex Mono',monospace; margin-bottom:9px;}
-  .card-bottom{display:flex; align-items:center; gap:10px;}
+  .card-bottom{display:flex; align-items:center; gap:10px; min-width:0;}
+  .card-bottom .status-pill{flex-shrink:0;}
   .status-pill{
     display:flex; align-items:center; gap:5px; font-size:12px; cursor:pointer;
     padding:7px 12px 7px 9px; border-radius:999px; background:var(--panel); border:1px solid var(--line);
@@ -271,15 +277,18 @@
   .traite-par-row{display:flex; align-items:center; gap:9px;}
   .traite-par-row input{flex:1; min-width:0;}
   .traite-par-row .mini-avatar{width:34px; height:34px; font-size:14px;}
-  .card-photos{font-size:11.5px; color:var(--text-faint);}
+  .card-photos{font-size:11.5px; color:var(--text-faint); white-space:nowrap; flex-shrink:0;}
   .mini-avatar{
     display:inline-flex; align-items:center; justify-content:center; border-radius:50%;
     background:var(--accent); color:#0d1116; font-family:'Oswald',sans-serif; font-weight:600;
     flex-shrink:0; overflow:hidden;
   }
-  .card-author{display:flex; flex-direction:column; align-items:center; gap:3px; margin-top:2px;}
+  .card-author{
+    display:flex; flex-direction:row; align-items:center; gap:6px;
+    margin-left:auto; min-width:0;
+  }
   .card-author-name{
-    font-size:9.5px; color:var(--text-faint); max-width:56px; text-align:center;
+    font-size:10px; color:var(--text-faint); max-width:64px;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
 
@@ -617,6 +626,10 @@ import {
   initializeFirestore, persistentLocalCache, persistentSingleTabManager,
   collection, doc, setDoc, deleteDoc, getDoc, getDocFromCache, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
+import {
+  getAuth, signInAnonymously, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js";
+
 const firebaseConfig = {
   apiKey: "AIzaSyCPPl7FjwIdTGGeLExr7PKGpDPYR8kX7NI",
   authDomain: "suivi-anomalies-terrain-83472.firebaseapp.com",
@@ -631,6 +644,7 @@ const fbApp = initializeApp(firebaseConfig);
 const db = initializeFirestore(fbApp, {
   localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
 });
+const auth = getAuth(fbApp);
 const ANOMALIES_COL = 'anomalies';
 const PHOTOS_COL = 'photos';
 const PUSHSUBS_COL = 'pushSubs';
@@ -756,6 +770,44 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   function saveProfile(name){
     profile = {name: name.trim()};
     try{ localStorage.setItem('anomalies_profile', JSON.stringify(profile)); }catch(e){ /* ignore */ }
+  }
+
+  // Report du nom sur les anomalies déjà enregistrées.
+  // Sans lui, changer de nom laisse les fiches à l'ancien nom et vide le filtre
+  // « Les miennes » : la correspondance par identifiant d'appareil ne joue pas pour
+  // les anomalies créées avant son introduction, ni après une réinstallation.
+  // Critère de propriété : l'identifiant d'appareil s'il correspond, sinon l'ancien nom exact.
+  // On réassocie l'identifiant au passage, pour que les renommages suivants n'en dépendent plus.
+  function renameMyAnomalies(previousName, newName){
+    const from = (previousName || '').trim();
+    const to = (newName || '').trim();
+    if(!to || from === to) return 0;
+    // « Anonyme » est le nom par défaut de tout le monde : jamais un critère de propriété.
+    const byName = from && from !== 'Anonyme';
+
+    const touched = [];
+    anomalies.forEach(a=>{
+      const patch = {};
+      const mineCreated = (currentUid && a.createdByUid === currentUid)
+        || (byName && a.createdBy === from);
+      if(mineCreated && a.createdBy !== to){
+        patch.createdBy = to;
+        if(currentUid) patch.createdByUid = currentUid;
+      }
+      const mineTreated = a.traitePar
+        && ((currentUid && a.traiteParUid === currentUid) || (byName && a.traitePar === from));
+      if(mineTreated && a.traitePar !== to){
+        patch.traitePar = to;
+        if(currentUid) patch.traiteParUid = currentUid;
+      }
+      if(Object.keys(patch).length){
+        Object.assign(a, patch);   // effet immédiat à l'écran, avant même l'aller-retour réseau
+        touched.push(a);
+      }
+    });
+    // Écritures non attendues : hors ligne, elles partiront au retour du réseau.
+    touched.forEach(a=> saveAnomalyDoc(a));
+    return touched.length;
   }
 
   function getTheme(){
@@ -962,8 +1014,6 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ author: author || '', self: mySubEndpoint }),
-      // La requête doit aboutir même si la page se ferme juste après.
-      keepalive: true,
     });
   }
 
@@ -995,7 +1045,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '4.4';
+  const APP_VERSION = '4.7';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -1183,25 +1233,25 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
           cardsHtml = visibleItems.slice().sort((a,b)=> (b.createdAt||'').localeCompare(a.createdAt||'')).map(a=>{
             const isNew = a.createdAt && (Date.now() - new Date(a.createdAt).getTime()) < 24*60*60*1000;
             const photoCount = getPhotoIds(a).length;
+            // Anomalies antérieures à la 4.1 : pas d'identifiant, donc pas de numéro.
+            const ord = orderOf(a);
             const bandClass = currentView === 'history' ? 'traite' : statusClass(a.statut);
             return `
             <div class="anomaly-card" data-cat="${cat.id}" data-id="${a.id}">
               <span class="card-band ${bandClass}"></span>
               <div class="card-body">
-                <div class="card-main">
-                  <div class="card-desc">${escapeHtml(a.description||'')}</div>
-                  <div class="card-meta">${escapeHtml(a.voie||'—')} · PK ${escapeHtml(a.pk||'—')} · ${escapeHtml(a.equipement||'—')}</div>
-                  <div class="card-bottom">
-                    ${currentView === 'history'
-                      ? `<span class="status-pill traite" style="cursor:default"><span class="dot"></span>Archivée</span>`
-                      : `<span class="status-pill ${statusClass(a.statut)}"><span class="dot"></span>${escapeHtml(a.statut)}<span class="cycle-hint">⟳</span></span>`}
-                    ${photoCount ? `<span class="card-photos">${photoCount > 1 ? photoCount + ' photos' : '1 photo'}</span>` : ''}
-                  </div>
-                </div>
-                <div class="card-side">
+                <div class="card-top">
+                  ${/\d/.test(ord) ? `<span class="card-order" title="Numéro dans la catégorie">N° ${escapeHtml(ord)}</span>` : ''}
                   <span class="priority-chip ${priorityClass(a.priorite)}">${escapeHtml(a.priorite)}</span>
-                  <span class="card-order" title="Numéro dans la catégorie">${escapeHtml(orderOf(a))}</span>
                   ${isNew ? '<span class="new-badge">NOUVEAU</span>' : ''}
+                </div>
+                <div class="card-desc">${escapeHtml(a.description||'')}</div>
+                <div class="card-meta">${escapeHtml(a.voie||'—')} · PK ${escapeHtml(a.pk||'—')} · ${escapeHtml(a.equipement||'—')}</div>
+                <div class="card-bottom">
+                  ${currentView === 'history'
+                    ? `<span class="status-pill traite" style="cursor:default"><span class="dot"></span>Archivée</span>`
+                    : `<span class="status-pill ${statusClass(a.statut)}"><span class="dot"></span>${escapeHtml(a.statut)}<span class="cycle-hint">⟳</span></span>`}
+                  ${photoCount ? `<span class="card-photos">${photoCount > 1 ? photoCount + ' photos' : '1 photo'}</span>` : ''}
                   ${(()=>{
                     // Traitée : on montre qui l'a traitée. Sinon, qui l'a créée.
                     const treated = a.statut === 'Traité' && a.traitePar;
@@ -1209,7 +1259,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
                     const uid = treated ? (a.traiteParUid || '') : (a.createdByUid || '');
                     if(!who) return '';
                     const label = treated ? 'Traité par' : 'Ajouté par';
-                    return `<span class="card-author" title="${escapeHtml(label + ' ' + who)}">${avatarMarkup({uid, name: who}, 26)}<span class="card-author-name">${escapeHtml(who)}</span></span>`;
+                    return `<span class="card-author" title="${escapeHtml(label + ' ' + who)}">${avatarMarkup({uid, name: who}, 24)}<span class="card-author-name">${escapeHtml(who)}</span></span>`;
                   })()}
                 </div>
               </div>
@@ -1482,7 +1532,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
               <label for="accName">Nom affiché</label>
               <input id="accName" type="text" value="${escapeHtml(name)}" placeholder="ex : J. Martin" maxlength="60" autocapitalize="words">
             </div>
-            <p class="settings-note">Ce nom identifie vos anomalies auprès de l'équipe et alimente le filtre « Les miennes ». Les anomalies déjà enregistrées gardent le nom utilisé au moment de leur création.</p>
+            <p class="settings-note">Ce nom identifie vos anomalies auprès de l'équipe et alimente le filtre « Les miennes ». Si vous le modifiez, vos anomalies déjà enregistrées prennent le nouveau nom.</p>
           </div>
           <div class="sheet-actions">
             <button type="button" class="btn" data-close>Fermer</button>
@@ -1521,13 +1571,19 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }
 
     $('#accSave').addEventListener('click', ()=>{
+      const previousName = profile.name || '';
       saveProfile($('#accName').value);
       // Le nom sert de clé à la photo partagée : on la republie sous le nouveau nom.
       const myPhoto = getAvatarPhoto();
       if(myPhoto) setAvatarPhoto(myPhoto);
+      // Puis on reporte le nom sur les anomalies existantes, pour que les fiches
+      // et le filtre « Les miennes » suivent immédiatement.
+      const moved = renameMyAnomalies(previousName, profile.name);
       closeModal();
       render();
-      showToast('Profil enregistré');
+      showToast(moved
+        ? `Profil enregistré — ${moved} anomalie${moved > 1 ? 's' : ''} à votre nouveau nom`
+        : 'Profil enregistré');
     });
   }
 
@@ -1794,9 +1850,11 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     `;
     $('#overlayEl').addEventListener('click', e=>{ if(e.target.id==='overlayEl') closeModal(); });
     $('#cancelName').addEventListener('click', closeModal);
-    $('#saveName').addEventListener('click', async ()=>{
+    $('#saveName').addEventListener('click', ()=>{
       const v = $('#nameInput').value;
-      await saveProfile(v);
+      const previousName = profile.name || '';
+      saveProfile(v);
+      renameMyAnomalies(previousName, profile.name);
       closeModal();
       showToast('Nom enregistré');
     });
@@ -2424,25 +2482,22 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   // Firebase attribue silencieusement un identifiant unique et permanent.
   // Il sert de clé stable : le nom affiché peut changer sans rien casser.
   let currentUid = '';
-  // L'authentification ne conditionne rien à l'affichage : elle sert uniquement
-  // à étiqueter les anomalies. On la charge donc en arrière-plan, une fois que
-  // la liste est déjà à l'écran, pour ne pas retarder l'ouverture.
-  async function startAuth(){
-    try{
-      const mod = await import('https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js');
-      const auth = mod.getAuth(fbApp);
-      mod.onAuthStateChanged(auth, (user)=>{
-        if(user){
-          currentUid = user.uid;
-        }else{
-          mod.signInAnonymously(auth).catch((e)=> console.error(e));
-        }
-      });
-    }catch(e){
-      // Hors ligne ou module indisponible : l'application reste pleinement utilisable,
-      // les anomalies seront simplement identifiées par le nom affiché.
-      console.error(e);
-    }
+  let syncStarted = false;
+  function startAuth(){
+    onAuthStateChanged(auth, (user)=>{
+      if(user){
+        currentUid = user.uid;
+        if(!syncStarted){ syncStarted = true; startRealtimeSync(); }
+        if(!modalOpen) render();
+      }else{
+        signInAnonymously(auth).catch((e)=>{
+          console.error(e);
+          // Sans réseau au tout premier lancement : on affiche quand même
+          // ce qui est disponible localement.
+          if(!syncStarted){ syncStarted = true; startRealtimeSync(); }
+        });
+      }
+    });
   }
 
   function startRealtimeSync(){
@@ -2459,18 +2514,14 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     document.addEventListener('visibilitychange', ()=>{
       if(document.visibilityState === 'hidden'){
         // On quitte l'app : on mémorise l'instant, qui servira de repère au retour.
-        // Un rechargement de mise à jour n'est pas un départ : on ne touche à rien,
-        // sinon les anomalies arrivées entre-temps seraient considérées comme vues.
-        if(!updateReloading) updateLastSeen();
+        updateLastSeen();
       }else{
         // Retour à l'écran : on repart du repère posé au moment du départ.
         sessionBaseline = getLastSeen();
         setTimeout(()=> checkForNewAnomalies(anomalies), 200);
       }
     });
-    window.addEventListener('pagehide', ()=>{
-      if(!updateReloading) updateLastSeen();
-    });
+    window.addEventListener('pagehide', updateLastSeen);
 
     onSnapshot(collection(db, ANOMALIES_COL), { includeMetadataChanges: true }, (snapshot)=>{
       anomalies = snapshot.docs.map(d=> ({ id: d.id, ...d.data() }));
@@ -2478,7 +2529,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       updateSyncStatus(snapshot.metadata.fromCache, snapshot.metadata.hasPendingWrites);
       checkForNewAnomalies(anomalies);
       // Rend les photos consultables même sans réseau par la suite.
-      setTimeout(prefetchPhotos, 8000);
+      setTimeout(prefetchPhotos, 2500);
     }, (error)=>{
       console.error(error);
       updateSyncStatus(true, false);
@@ -2568,13 +2619,6 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   }
 
   let updateReloading = false;
-  const appLoadedAt = Date.now();
-
-  function applyUpdateNow(){
-    updateReloading = true;
-    location.reload();
-  }
-
   async function checkForAppUpdate(manual){
     if(updateReloading) return;
     try{
@@ -2596,25 +2640,24 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
 
       if(manual){
         showToast('Mise à jour vers ' + m[1] + '…');
-        setTimeout(applyUpdateNow, 600);
+        updateReloading = true;
+        setTimeout(()=> location.reload(), 600);
         return;
       }
 
-      // Recharger sans prévenir est dangereux : cela ferme une fiche en cours
-      // de saisie et interrompt les envois réseau. On ne le fait donc que juste
-      // après l'ouverture de l'application, quand rien n'est en cours.
+      // Sécurité : on ne recharge automatiquement qu'une seule fois par version.
+      // Sans cela, un cache récalcitrant provoquerait des rechargements en boucle.
       let alreadyTried = null;
       try{ alreadyTried = sessionStorage.getItem('anomalies_update_try'); }catch(e){}
-      const justOpened = (Date.now() - appLoadedAt) < 12000;
-      const safeToReload = justOpened && !modalOpen && alreadyTried !== m[1];
-
-      if(safeToReload){
-        try{ sessionStorage.setItem('anomalies_update_try', m[1]); }catch(e){}
-        applyUpdateNow();
+      if(alreadyTried === m[1]){
+        showToast('Nouvelle version disponible — toucher pour l\u2019installer', 8000, ()=>{
+          location.reload();
+        });
         return;
       }
-      // Sinon on laisse la main à l'utilisateur.
-      showToast('Nouvelle version disponible — toucher pour l\u2019installer', 8000, applyUpdateNow);
+      try{ sessionStorage.setItem('anomalies_update_try', m[1]); }catch(e){}
+      updateReloading = true;
+      location.reload();
     }catch(e){
       if(manual) showToast('Vérification impossible — vérifiez votre connexion');
     }
@@ -2624,22 +2667,20 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     // Vérification active : compare la version chargée à celle publiée en ligne.
     // C'est ce qui garantit la mise à jour même quand le téléphone réaffiche
     // l'application depuis sa mémoire sans recharger la page.
-    setTimeout(()=> checkForAppUpdate(false), 2000);
+    setTimeout(()=> checkForAppUpdate(false), 1500);
     document.addEventListener('visibilitychange', ()=>{
       if(document.visibilityState === 'visible') checkForAppUpdate(false);
     });
-    // Filet de sécurité, espacé : une vérification trop fréquente n'apporte rien
-    // et multiplie les occasions d'interrompre l'utilisateur.
+    // Filet de sécurité : certains appareils ne signalent pas le retour au premier plan.
     setInterval(()=>{
       if(document.visibilityState === 'visible') checkForAppUpdate(false);
-    }, 15 * 60 * 1000);
+    }, 60000);
 
     if(!('serviceWorker' in navigator)) return;
     navigator.serviceWorker.addEventListener('controllerchange', ()=>{
       if(updateReloading) return;
-      // Jamais pendant une saisie : on proposera la mise à jour plus tard.
-      if(modalOpen) return;
-      applyUpdateNow();
+      updateReloading = true;
+      location.reload();
     });
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg)=>{
       document.addEventListener('visibilitychange', ()=>{
@@ -2653,21 +2694,17 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     wireStaticEvents();
     loadProfile();
     render();
-    // Priorité absolue : afficher les anomalies. Le cache local répond
-    // immédiatement, sans attendre ni le réseau ni l'authentification.
-    startRealtimeSync();
-
+    startAuth();
+    setupAutoUpdate();
+    refreshMySubEndpoint();
+    // Une anomalie créée hors ligne lors d'une session précédente peut avoir
+    // une notification encore en attente d'envoi.
+    flushPendingPush();
     if(!hasSeenTutorial()){
       setTimeout(()=>{ openTutorial(true); }, 400);
     }else if(!profile.name){
       setTimeout(()=>{ openProfileModal(); }, 400);
     }
-
-    // Tout le reste est secondaire et ne doit pas ralentir l'ouverture.
-    startAuth();
-    setTimeout(refreshMySubEndpoint, 1200);
-    setTimeout(flushPendingPush, 2000);
-    setTimeout(setupAutoUpdate, 2500);
   }
 
   init();
