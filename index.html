@@ -617,10 +617,6 @@ import {
   initializeFirestore, persistentLocalCache, persistentSingleTabManager,
   collection, doc, setDoc, deleteDoc, getDoc, getDocFromCache, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
-import {
-  getAuth, signInAnonymously, onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js";
-
 const firebaseConfig = {
   apiKey: "AIzaSyCPPl7FjwIdTGGeLExr7PKGpDPYR8kX7NI",
   authDomain: "suivi-anomalies-terrain-83472.firebaseapp.com",
@@ -635,7 +631,6 @@ const fbApp = initializeApp(firebaseConfig);
 const db = initializeFirestore(fbApp, {
   localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() })
 });
-const auth = getAuth(fbApp);
 const ANOMALIES_COL = 'anomalies';
 const PHOTOS_COL = 'photos';
 const PUSHSUBS_COL = 'pushSubs';
@@ -1000,7 +995,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '4.3';
+  const APP_VERSION = '4.4';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -2429,22 +2424,25 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   // Firebase attribue silencieusement un identifiant unique et permanent.
   // Il sert de clé stable : le nom affiché peut changer sans rien casser.
   let currentUid = '';
-  let syncStarted = false;
-  function startAuth(){
-    onAuthStateChanged(auth, (user)=>{
-      if(user){
-        currentUid = user.uid;
-        if(!syncStarted){ syncStarted = true; startRealtimeSync(); }
-        if(!modalOpen) render();
-      }else{
-        signInAnonymously(auth).catch((e)=>{
-          console.error(e);
-          // Sans réseau au tout premier lancement : on affiche quand même
-          // ce qui est disponible localement.
-          if(!syncStarted){ syncStarted = true; startRealtimeSync(); }
-        });
-      }
-    });
+  // L'authentification ne conditionne rien à l'affichage : elle sert uniquement
+  // à étiqueter les anomalies. On la charge donc en arrière-plan, une fois que
+  // la liste est déjà à l'écran, pour ne pas retarder l'ouverture.
+  async function startAuth(){
+    try{
+      const mod = await import('https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js');
+      const auth = mod.getAuth(fbApp);
+      mod.onAuthStateChanged(auth, (user)=>{
+        if(user){
+          currentUid = user.uid;
+        }else{
+          mod.signInAnonymously(auth).catch((e)=> console.error(e));
+        }
+      });
+    }catch(e){
+      // Hors ligne ou module indisponible : l'application reste pleinement utilisable,
+      // les anomalies seront simplement identifiées par le nom affiché.
+      console.error(e);
+    }
   }
 
   function startRealtimeSync(){
@@ -2480,7 +2478,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       updateSyncStatus(snapshot.metadata.fromCache, snapshot.metadata.hasPendingWrites);
       checkForNewAnomalies(anomalies);
       // Rend les photos consultables même sans réseau par la suite.
-      setTimeout(prefetchPhotos, 2500);
+      setTimeout(prefetchPhotos, 8000);
     }, (error)=>{
       console.error(error);
       updateSyncStatus(true, false);
@@ -2626,7 +2624,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     // Vérification active : compare la version chargée à celle publiée en ligne.
     // C'est ce qui garantit la mise à jour même quand le téléphone réaffiche
     // l'application depuis sa mémoire sans recharger la page.
-    setTimeout(()=> checkForAppUpdate(false), 1500);
+    setTimeout(()=> checkForAppUpdate(false), 2000);
     document.addEventListener('visibilitychange', ()=>{
       if(document.visibilityState === 'visible') checkForAppUpdate(false);
     });
@@ -2655,17 +2653,21 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     wireStaticEvents();
     loadProfile();
     render();
-    startAuth();
-    setupAutoUpdate();
-    refreshMySubEndpoint();
-    // Une anomalie créée hors ligne lors d'une session précédente peut avoir
-    // une notification encore en attente d'envoi.
-    flushPendingPush();
+    // Priorité absolue : afficher les anomalies. Le cache local répond
+    // immédiatement, sans attendre ni le réseau ni l'authentification.
+    startRealtimeSync();
+
     if(!hasSeenTutorial()){
       setTimeout(()=>{ openTutorial(true); }, 400);
     }else if(!profile.name){
       setTimeout(()=>{ openProfileModal(); }, 400);
     }
+
+    // Tout le reste est secondaire et ne doit pas ralentir l'ouverture.
+    startAuth();
+    setTimeout(refreshMySubEndpoint, 1200);
+    setTimeout(flushPendingPush, 2000);
+    setTimeout(setupAutoUpdate, 2500);
   }
 
   init();
