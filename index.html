@@ -488,6 +488,10 @@
     box-shadow:0 12px 30px rgba(0,0,0,0.42), 0 0 0 4px var(--red-bg);
     animation:nbIn 0.34s cubic-bezier(0.2,0.9,0.3,1.25);
   }
+  /* Indispensable : la règle du navigateur [hidden]{display:none} est de très
+     faible priorité et se fait supplanter par le display:flex ci-dessus.
+     Sans cette ligne, la bannière reste affichée en permanence, vide. */
+  .new-banner[hidden]{display:none;}
   @keyframes nbIn{ from{opacity:0; transform:translateY(18px);} to{opacity:1; transform:none;} }
   .new-banner .nb-dot{
     width:11px; height:11px; border-radius:50%; background:var(--red);
@@ -1088,7 +1092,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '4.8';
+  const APP_VERSION = '4.9';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -2513,6 +2517,14 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   }
 
   const notifiedAnomalyIds = new Set();
+  // La bannière ne doit apparaître qu'à l'ouverture de l'application, ou au retour
+  // à l'écran, pour les anomalies créées pendant l'absence. Une fois les données du
+  // serveur reçues, elle est désarmée : une anomalie créée par un collègue pendant
+  // qu'on consulte la liste apparaît simplement dans la liste, avec son badge
+  // NOUVEAU, sans faire surgir la bannière.
+  let bannerArmed = true;   // l'application vient de se charger
+  let bannerBatch = [];
+  function armBanner(){ bannerArmed = true; bannerBatch = []; }
   // Référence de comparaison, figée pendant toute la session visible.
   // Elle ne doit PAS être réécrite à chaque réception de données : les premières
   // données viennent du cache local (sans les ajouts récents) et écraseraient la
@@ -2542,11 +2554,16 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       !notifiedAnomalyIds.has(a.id)
     );
     if(newOnes.length > 0){
+      // Le badge NOUVEAU et le filtre « Nouvelles » sont alimentés dans tous les
+      // cas ; seule la bannière est réservée à l'ouverture.
       newOnes.forEach(a => { notifiedAnomalyIds.add(a.id); newBatchIds.add(a.id); });
-      const count = newOnes.length;
       renderChips();
-      haptic(18);
-      showNewBanner(count, ()=> goToNewAnomalies(newOnes));
+      if(bannerArmed){
+        const premier = bannerBatch.length === 0;
+        bannerBatch = bannerBatch.concat(newOnes);
+        if(premier) haptic(18);
+        showNewBanner(bannerBatch.length, ()=> goToNewAnomalies(bannerBatch));
+      }
     }
   }
 
@@ -2593,6 +2610,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
         // Nouvelle visite : on réattend des données fraîches avant de pouvoir
         // déplacer le repère.
         freshDataSeenWhileVisible = false;
+        armBanner();
         setTimeout(()=> checkForNewAnomalies(anomalies), 200);
       }
     });
@@ -2606,6 +2624,9 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       if(!modalOpen) render();
       updateSyncStatus(snapshot.metadata.fromCache, snapshot.metadata.hasPendingWrites);
       checkForNewAnomalies(anomalies);
+      // Les données du serveur sont arrivées et affichées : la bannière a joué son
+      // rôle pour cette ouverture. Les créations suivantes ne la redéclenchent plus.
+      if(!snapshot.metadata.fromCache) bannerArmed = false;
       // Rend les photos consultables même sans réseau par la suite.
       setTimeout(prefetchPhotos, 2500);
     }, (error)=>{
