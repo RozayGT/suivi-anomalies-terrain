@@ -474,6 +474,45 @@
     padding:11px 18px; border-radius:999px; font-size:13.5px; box-shadow:var(--shadow); z-index:80;
   }
 
+  /* Bannière des nouvelles anomalies.
+     Volontairement distincte du message de confirmation ordinaire : jusqu'ici
+     elle réutilisait la même pastille grise que « Profil enregistré » et se
+     confondait avec elle. Elle ne disparaît plus toute seule — il faut la
+     toucher pour ouvrir, ou la fermer explicitement. */
+  .new-banner{
+    position:fixed; left:14px; right:14px; max-width:612px; margin:0 auto;
+    bottom:calc(90px + env(safe-area-inset-bottom));
+    display:flex; align-items:center; gap:11px;
+    background:var(--panel-2); border:2px solid var(--red); border-radius:14px;
+    padding:12px 12px 12px 14px; cursor:pointer; z-index:45;
+    box-shadow:0 12px 30px rgba(0,0,0,0.42), 0 0 0 4px var(--red-bg);
+    animation:nbIn 0.34s cubic-bezier(0.2,0.9,0.3,1.25);
+  }
+  @keyframes nbIn{ from{opacity:0; transform:translateY(18px);} to{opacity:1; transform:none;} }
+  .new-banner .nb-dot{
+    width:11px; height:11px; border-radius:50%; background:var(--red);
+    flex-shrink:0; animation:nbPulse 1.8s ease-in-out infinite;
+  }
+  @keyframes nbPulse{
+    0%,100%{ box-shadow:0 0 0 0 rgba(229,72,77,0.55); }
+    60%{ box-shadow:0 0 0 9px rgba(229,72,77,0); }
+  }
+  .new-banner .nb-text{flex:1; min-width:0;}
+  .new-banner .nb-title{
+    display:block; font-family:'Oswald',sans-serif; font-size:15px;
+    letter-spacing:0.03em; color:var(--text); line-height:1.15;
+  }
+  .new-banner .nb-sub{
+    display:block; font-size:11.5px; color:var(--text-dim); margin-top:3px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .new-banner .nb-go{color:var(--red); font-size:22px; flex-shrink:0; line-height:1;}
+  .new-banner .nb-close{
+    flex-shrink:0; width:27px; height:27px; border-radius:50%;
+    border:1px solid var(--line); background:transparent; color:var(--text-dim);
+    font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+
   .photo-actions{display:flex; gap:8px; margin-bottom:10px;}
   .photo-actions .btn{padding:10px 8px; font-size:13px; flex:1;}
   .photo-actions .btn:disabled{opacity:0.4; cursor:not-allowed;}
@@ -598,6 +637,7 @@
   <button class="fab" id="fab" title="Ajouter une anomalie">+</button>
   <div id="modalRoot"></div>
   <div class="toast" id="toast" hidden></div>
+  <div class="new-banner" id="newBanner" hidden></div>
 </div>
 
 <script>
@@ -698,6 +738,9 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   let savedScrollY = 0;
   let bodyScrollLocked = false;
   function lockBodyScroll(){
+    // Point de passage commun à toutes les fiches : la bannière ne doit pas
+    // rester affichée par-dessus l'une d'elles.
+    hideNewBanner();
     if(bodyScrollLocked) return;
     bodyScrollLocked = true;
     savedScrollY = window.scrollY || window.pageYOffset || 0;
@@ -1045,7 +1088,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '4.7';
+  const APP_VERSION = '4.8';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -2385,6 +2428,29 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     });
   }
 
+  function hideNewBanner(){
+    const b = $('#newBanner');
+    if(b) b.hidden = true;
+  }
+  function showNewBanner(count, onOpen){
+    const b = $('#newBanner');
+    if(!b) return;
+    b.innerHTML =
+      '<span class="nb-dot"></span>' +
+      '<span class="nb-text">' +
+        '<span class="nb-title">' + (count === 1 ? '1 NOUVELLE ANOMALIE' : count + ' NOUVELLES ANOMALIES') + '</span>' +
+        '<span class="nb-sub">Depuis votre derni\u00e8re visite \u00b7 toucher pour ' + (count === 1 ? 'l\u2019ouvrir' : 'les voir') + '</span>' +
+      '</span>' +
+      '<span class="nb-go">\u203a</span>' +
+      '<button class="nb-close" type="button" aria-label="Masquer">\u2715</button>';
+    b.hidden = false;
+    b.onclick = (e)=>{
+      hideNewBanner();
+      if(e.target.closest('.nb-close')) return;
+      onOpen();
+    };
+  }
+
   function showToast(msg, duration, onClick){
     const t = $('#toast');
     t.textContent = msg;
@@ -2433,7 +2499,16 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   function getLastSeen(){
     try{ return localStorage.getItem('anomalies_last_seen'); }catch(e){ return null; }
   }
-  function updateLastSeen(){
+  // Vrai seulement quand des données du serveur — et non du cache local — sont
+  // arrivées pendant que l'application était à l'écran.
+  // Sans cette condition, une synchronisation en arrière-plan faisait rentrer les
+  // anomalies sans les signaler (la détection s'arrête si l'écran n'est pas actif),
+  // puis le repère était poussé à « maintenant » : elles ne redevenaient jamais
+  // nouvelles, même au lancement suivant.
+  let freshDataSeenWhileVisible = false;
+
+  function updateLastSeen(force){
+    if(!force && !freshDataSeenWhileVisible) return;
     try{ localStorage.setItem('anomalies_last_seen', new Date().toISOString()); }catch(e){ /* ignore */ }
   }
 
@@ -2458,7 +2533,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     if(!sessionBaseline){
       // Toute première utilisation : rien à signaler, on pose le repère.
       sessionBaseline = new Date().toISOString();
-      updateLastSeen();
+      updateLastSeen(true);
       return;
     }
     const newOnes = list.filter(a =>
@@ -2469,12 +2544,9 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     if(newOnes.length > 0){
       newOnes.forEach(a => { notifiedAnomalyIds.add(a.id); newBatchIds.add(a.id); });
       const count = newOnes.length;
-      const msg = count === 1
-        ? '📋 1 nouvelle anomalie depuis votre dernière visite — toucher pour l\u2019ouvrir'
-        : `📋 ${count} nouvelles anomalies depuis votre dernière visite — toucher pour les voir`;
       renderChips();
       haptic(18);
-      showToast(msg, 8000, ()=> goToNewAnomalies(newOnes));
+      showNewBanner(count, ()=> goToNewAnomalies(newOnes));
     }
   }
 
@@ -2518,13 +2590,19 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       }else{
         // Retour à l'écran : on repart du repère posé au moment du départ.
         sessionBaseline = getLastSeen();
+        // Nouvelle visite : on réattend des données fraîches avant de pouvoir
+        // déplacer le repère.
+        freshDataSeenWhileVisible = false;
         setTimeout(()=> checkForNewAnomalies(anomalies), 200);
       }
     });
-    window.addEventListener('pagehide', updateLastSeen);
+    window.addEventListener('pagehide', ()=> updateLastSeen());
 
     onSnapshot(collection(db, ANOMALIES_COL), { includeMetadataChanges: true }, (snapshot)=>{
       anomalies = snapshot.docs.map(d=> ({ id: d.id, ...d.data() }));
+      if(!snapshot.metadata.fromCache && document.visibilityState === 'visible'){
+        freshDataSeenWhileVisible = true;
+      }
       if(!modalOpen) render();
       updateSyncStatus(snapshot.metadata.fromCache, snapshot.metadata.hasPendingWrites);
       checkForNewAnomalies(anomalies);
