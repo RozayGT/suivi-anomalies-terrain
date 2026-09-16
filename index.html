@@ -104,6 +104,16 @@
   @media (prefers-reduced-motion: reduce){
     *{animation:none !important; transition:none !important;}
   }
+  html{
+    /* iOS grossit automatiquement le texte des blocs qu'il juge trop larges, et
+       recalcule cet ajustement quand l'application revient au premier plan : d'où
+       l'effet grossissant constaté au retour, sans que la page ne déborde
+       latéralement. On fige l'échelle du texte à 100 %.
+       Sans effet sur Android, où un viewport en width=device-width désactive déjà
+       ce mécanisme — mais la règle ne coûte rien et ferme le sujet des deux côtés. */
+    -webkit-text-size-adjust:100%;
+    text-size-adjust:100%;
+  }
   html,body{margin:0;padding:0;}
   body{
     background:var(--bg);
@@ -337,6 +347,17 @@
   }
   .sheet h2{font-size:17px; margin-bottom:2px;}
   .sheet .sheet-sub{font-size:12.5px; color:var(--text-dim); margin-bottom:16px; font-family:'IBM Plex Mono',monospace;}
+  /* Lieux proposés sous le champ PK. Des puces plutôt qu'une liste déroulante :
+     un seul appui, et un rendu identique sur iPhone et sur Android. */
+  .lieu-chips{display:flex; flex-wrap:wrap; gap:6px; margin:-4px 0 13px;}
+  .lieu-chip{
+    background:var(--panel); border:1px solid var(--line); color:var(--text-dim);
+    border-radius:999px; padding:7px 11px; font-size:12px; cursor:pointer;
+    white-space:nowrap; font-family:inherit;
+  }
+  .lieu-chip[data-active="true"]{
+    background:var(--accent); border-color:var(--accent); color:#0d1116; font-weight:600;
+  }
   .field{margin-bottom:13px;}
   .field label{display:block; font-size:12.5px; color:var(--text-dim); margin-bottom:5px; text-transform:uppercase; letter-spacing:0.02em;}
   .field input, .field select, .field textarea{
@@ -716,6 +737,9 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     {id:'rechauffage',    label:'Réchauffage',      prefix:'REC'},
   ];
   const VOIES = ['1L','2L','1D','2D','VM Gouss','V4 Gouss','VM Orry-Chantilly'];
+  // Lieux proposés sous le champ PK, quand le PK exact n'est pas connu.
+  // Pour en ajouter ou en retirer un, il suffit de modifier cette liste.
+  const LIEUX = ['Goussainville','Les Noues','Louvres','Fosses','Borne Blanche','Orry-la-Ville','Chantilly'];
   const STATUTS = ['Non traité','En cours','Traité'];
   const PRIORITES = ['Faible','Moyenne','Élevée'];
   const FILTER_MAP = {'non-traite':'Non traité','en-cours':'En cours','traite':'Traité'};
@@ -796,6 +820,15 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     const d = new Date();
     return d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   }
+  // Le champ accepte un PK (12+300) ou un nom de lieu. On ne préfixe par « PK »
+  // que dans le premier cas : sinon on lirait « PK Goussainville ».
+  function pkLabel(pk){
+    const v = (pk || '').trim();
+    if(!v) return '—';
+    if(/^pk\b/i.test(v)) return v;            // déjà préfixé à la saisie
+    return /\d/.test(v) ? 'PK ' + v : v;
+  }
+
   function statusClass(s){
     if(s==='Non traité') return 'non-traite';
     if(s==='En cours') return 'en-cours';
@@ -1092,7 +1125,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '5.0';
+  const APP_VERSION = '5.2';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -1293,7 +1326,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
                   ${isNew ? '<span class="new-badge">NOUVEAU</span>' : ''}
                 </div>
                 <div class="card-desc">${escapeHtml(a.description||'')}</div>
-                <div class="card-meta">${escapeHtml(a.voie||'—')} · PK ${escapeHtml(a.pk||'—')} · ${escapeHtml(a.equipement||'—')}</div>
+                <div class="card-meta">${escapeHtml(a.voie||'—')} · ${escapeHtml(pkLabel(a.pk))} · ${escapeHtml(a.equipement||'—')}</div>
                 <div class="card-bottom">
                   ${currentView === 'history'
                     ? `<span class="status-pill traite" style="cursor:default"><span class="dot"></span>Archivée</span>`
@@ -1941,9 +1974,12 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
                 <datalist id="voiesList">${VOIES.map(x=>`<option value="${escapeHtml(x)}">`).join('')}</datalist>
               </div>
               <div class="field">
-                <label for="f_pk">PK</label>
+                <label for="f_pk">PK / Lieux</label>
                 <input id="f_pk" type="text" autocomplete="off" value="${escapeHtml(v.pk)}" placeholder="ex : 12+300">
               </div>
+            </div>
+            <div class="lieu-chips" id="lieuChips">
+              ${LIEUX.map(x=>`<button type="button" class="lieu-chip" data-lieu="${escapeHtml(x)}">${escapeHtml(x)}</button>`).join('')}
             </div>
             <div class="field">
               <label for="f_equip">Équipement / repère *</label>
@@ -2033,6 +2069,28 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }
     renderTraitePar();
     $('#f_par').addEventListener('input', renderTraitePar);
+
+    // Puces de lieux : un appui remplit le champ PK, un second appui sur la même
+    // puce l'efface. La puce correspondant à la valeur saisie reste mise en avant,
+    // y compris à la réouverture d'une fiche existante.
+    const pkInput = $('#f_pk');
+    const lieuWrap = $('#lieuChips');
+    function syncLieuChips(){
+      const val = (pkInput.value || '').trim().toLowerCase();
+      lieuWrap.querySelectorAll('.lieu-chip').forEach(c=>{
+        c.dataset.active = (c.dataset.lieu.toLowerCase() === val) ? 'true' : 'false';
+      });
+    }
+    lieuWrap.addEventListener('click', e=>{
+      const chip = e.target.closest('.lieu-chip');
+      if(!chip) return;
+      const lieu = chip.dataset.lieu;
+      pkInput.value = (pkInput.value.trim() === lieu) ? '' : lieu;
+      syncLieuChips();
+      haptic(8);
+    });
+    pkInput.addEventListener('input', syncLieuChips);
+    syncLieuChips();
 
     $('#f_statut').addEventListener('change', ()=>{
       const isTraite = $('#f_statut').value === 'Traité';
@@ -2471,7 +2529,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   }
 
   function exportCSV(){
-    const headers = ['Catégorie','Identifiant','Date de constat','Voie','PK','Équipement','Description','Nb photos','Priorité','Statut','Date de traitement','Traité par','Commentaire'];
+    const headers = ['Catégorie','Identifiant','Date de constat','Voie','PK / Lieux','Équipement','Description','Nb photos','Priorité','Statut','Date de traitement','Traité par','Commentaire'];
     const rows = anomalies.map(a=>{
       const catLabel = (CATEGORIES.find(c=>c.id===a.category)||{}).label || a.category;
       return [catLabel,a.identifiant,fmtDate(a.dateConstat),a.voie,a.pk,a.equipement,a.description,getPhotoIds(a).length,a.priorite,a.statut,fmtDate(a.dateTraitement),a.traitePar,a.commentaire]
