@@ -349,7 +349,7 @@
   .sheet .sheet-sub{font-size:12.5px; color:var(--text-dim); margin-bottom:16px; font-family:'IBM Plex Mono',monospace;}
   /* Lieux proposés sous le champ PK. Des puces plutôt qu'une liste déroulante :
      un seul appui, et un rendu identique sur iPhone et sur Android. */
-  .lieu-chips{display:flex; flex-wrap:wrap; gap:6px; margin:-4px 0 13px;}
+  .lieu-chips{display:flex; flex-wrap:wrap; gap:6px;}
   .lieu-chip{
     background:var(--panel); border:1px solid var(--line); color:var(--text-dim);
     border-radius:999px; padding:7px 11px; font-size:12px; cursor:pointer;
@@ -822,6 +822,14 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   }
   // Le champ accepte un PK (12+300) ou un nom de lieu. On ne préfixe par « PK »
   // que dans le premier cas : sinon on lirait « PK Goussainville ».
+  // Ligne technique d'une carte. Le lieu et le PK sont deux segments distincts,
+  // et les segments vides sont omis plutôt que remplacés par un tiret.
+  function metaLine(a){
+    const seg = [a.voie, a.lieu, (a.pk||'').trim() ? pkLabel(a.pk) : '', a.equipement]
+      .map(x=> (x||'').trim()).filter(Boolean);
+    return seg.length ? seg.join(' · ') : '—';
+  }
+
   function pkLabel(pk){
     const v = (pk || '').trim();
     if(!v) return '—';
@@ -1125,7 +1133,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '5.2';
+  const APP_VERSION = '5.3';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -1245,7 +1253,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }else if(activeFilter!=='all' && a.statut!==FILTER_MAP[activeFilter]) return false;
     if(searchTerm){
       const q = searchTerm.toLowerCase();
-      const hay = [a.identifiant,a.voie,a.pk,a.equipement,a.description,a.commentaire,a.traitePar].join(' ').toLowerCase();
+      const hay = [a.identifiant,a.voie,a.lieu,a.pk,a.equipement,a.description,a.commentaire,a.traitePar].join(' ').toLowerCase();
       if(!hay.includes(q)) return false;
     }
     return true;
@@ -1326,7 +1334,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
                   ${isNew ? '<span class="new-badge">NOUVEAU</span>' : ''}
                 </div>
                 <div class="card-desc">${escapeHtml(a.description||'')}</div>
-                <div class="card-meta">${escapeHtml(a.voie||'—')} · ${escapeHtml(pkLabel(a.pk))} · ${escapeHtml(a.equipement||'—')}</div>
+                <div class="card-meta">${escapeHtml(metaLine(a))}</div>
                 <div class="card-bottom">
                   ${currentView === 'history'
                     ? `<span class="status-pill traite" style="cursor:default"><span class="dot"></span>Archivée</span>`
@@ -1954,9 +1962,15 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
 
     const today = new Date().toISOString().slice(0,10);
     const v = existing || {
-      dateConstat: today, voie:'', pk:'', equipement:'', description:'',
+      dateConstat: today, voie:'', lieu:'', pk:'', equipement:'', description:'',
       priorite:'Moyenne', statut:'Non traité', dateTraitement:'', traitePar: profile.name||'', commentaire:''
     };
+    // Reprise des fiches de la version précédente, où le lieu pouvait être saisi
+    // dans le champ PK : on le remonte dans le bon champ à l'ouverture.
+    const pkBrut = (v.pk || '').trim();
+    const lieuDansPk = !v.lieu && LIEUX.includes(pkBrut);
+    const vLieu = v.lieu || (lieuDansPk ? pkBrut : '');
+    const vPk = lieuDansPk ? '' : (v.pk || '');
 
     $('#modalRoot').innerHTML = `
       <div class="overlay" id="overlayEl">
@@ -1967,6 +1981,12 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
           <h2>${editing ? escapeHtml(existing.identifiant) : 'Nouvelle anomalie'}</h2>
           <p class="sheet-sub">${escapeHtml(cat.label)}</p>
           <form id="anomalyForm">
+            <div class="field">
+              <label>Lieu</label>
+              <div class="lieu-chips" id="lieuChips">
+                ${LIEUX.map(x=>`<button type="button" class="lieu-chip" data-lieu="${escapeHtml(x)}" data-active="${vLieu === x ? 'true' : 'false'}">${escapeHtml(x)}</button>`).join('')}
+              </div>
+            </div>
             <div class="field-row">
               <div class="field">
                 <label for="f_voie">Voie *</label>
@@ -1974,12 +1994,9 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
                 <datalist id="voiesList">${VOIES.map(x=>`<option value="${escapeHtml(x)}">`).join('')}</datalist>
               </div>
               <div class="field">
-                <label for="f_pk">PK / Lieux</label>
-                <input id="f_pk" type="text" autocomplete="off" value="${escapeHtml(v.pk)}" placeholder="ex : 12+300">
+                <label for="f_pk">PK</label>
+                <input id="f_pk" type="text" autocomplete="off" value="${escapeHtml(vPk)}" placeholder="ex : 12+300">
               </div>
-            </div>
-            <div class="lieu-chips" id="lieuChips">
-              ${LIEUX.map(x=>`<button type="button" class="lieu-chip" data-lieu="${escapeHtml(x)}">${escapeHtml(x)}</button>`).join('')}
             </div>
             <div class="field">
               <label for="f_equip">Équipement / repère *</label>
@@ -2070,27 +2087,22 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     renderTraitePar();
     $('#f_par').addEventListener('input', renderTraitePar);
 
-    // Puces de lieux : un appui remplit le champ PK, un second appui sur la même
-    // puce l'efface. La puce correspondant à la valeur saisie reste mise en avant,
-    // y compris à la réouverture d'une fiche existante.
-    const pkInput = $('#f_pk');
+    // Lieu : sélection unique, indépendante du champ PK. Un appui sélectionne,
+    // un second appui sur la même puce désélectionne. Aucune saisie libre, pour
+    // que le lieu reste toujours écrit à l'identique et donc filtrable de façon sûre.
     const lieuWrap = $('#lieuChips');
-    function syncLieuChips(){
-      const val = (pkInput.value || '').trim().toLowerCase();
-      lieuWrap.querySelectorAll('.lieu-chip').forEach(c=>{
-        c.dataset.active = (c.dataset.lieu.toLowerCase() === val) ? 'true' : 'false';
-      });
+    function selectedLieu(){
+      const actif = lieuWrap.querySelector('.lieu-chip[data-active="true"]');
+      return actif ? actif.dataset.lieu : '';
     }
     lieuWrap.addEventListener('click', e=>{
       const chip = e.target.closest('.lieu-chip');
       if(!chip) return;
-      const lieu = chip.dataset.lieu;
-      pkInput.value = (pkInput.value.trim() === lieu) ? '' : lieu;
-      syncLieuChips();
+      const etaitActif = chip.dataset.active === 'true';
+      lieuWrap.querySelectorAll('.lieu-chip').forEach(c=> c.dataset.active = 'false');
+      if(!etaitActif) chip.dataset.active = 'true';
       haptic(8);
     });
-    pkInput.addEventListener('input', syncLieuChips);
-    syncLieuChips();
 
     $('#f_statut').addEventListener('change', ()=>{
       const isTraite = $('#f_statut').value === 'Traité';
@@ -2303,6 +2315,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       const wasTraite = editing && existing.statut === 'Traité';
       const payload = {
         voie: $('#f_voie').value.trim(),
+        lieu: selectedLieu(),
         pk: $('#f_pk').value.trim(),
         equipement: $('#f_equip').value.trim(),
         dateConstat: $('#f_date').value,
@@ -2529,10 +2542,10 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   }
 
   function exportCSV(){
-    const headers = ['Catégorie','Identifiant','Date de constat','Voie','PK / Lieux','Équipement','Description','Nb photos','Priorité','Statut','Date de traitement','Traité par','Commentaire'];
+    const headers = ['Catégorie','Identifiant','Date de constat','Voie','Lieu','PK','Équipement','Description','Nb photos','Priorité','Statut','Date de traitement','Traité par','Commentaire'];
     const rows = anomalies.map(a=>{
       const catLabel = (CATEGORIES.find(c=>c.id===a.category)||{}).label || a.category;
-      return [catLabel,a.identifiant,fmtDate(a.dateConstat),a.voie,a.pk,a.equipement,a.description,getPhotoIds(a).length,a.priorite,a.statut,fmtDate(a.dateTraitement),a.traitePar,a.commentaire]
+      return [catLabel,a.identifiant,fmtDate(a.dateConstat),a.voie,a.lieu,a.pk,a.equipement,a.description,getPhotoIds(a).length,a.priorite,a.statut,fmtDate(a.dateTraitement),a.traitePar,a.commentaire]
         .map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`).join(',');
     });
     const csv = [headers.join(','), ...rows].join('\r\n');
