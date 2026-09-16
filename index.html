@@ -788,6 +788,27 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     document.body.style.width = '';
     window.scrollTo(0, savedScrollY);
   }
+
+  // Clavier et fiches ouvertes.
+  // Le corps de page est figé pendant qu'une fiche est ouverte, donc la fenêtre
+  // doit rester à zéro. iOS la fait pourtant défiler de lui-même pour dégager un
+  // champ passé sous le clavier : le haut de la fiche sort de l'écran et remonter
+  // dans la fiche ne le ramène pas, puisque son propre défilement est déjà à zéro.
+  // Tout décalage de la fenêtre pendant ce temps est donc un artefact à annuler.
+  function resetSheetShift(){
+    if(bodyScrollLocked && window.scrollY !== 0) window.scrollTo(0, 0);
+  }
+  // Champ quitté : le clavier se referme, on remet la fiche en place.
+  document.addEventListener('focusout', ()=> setTimeout(resetSheetShift, 80));
+  // Remontée en haut d'une fiche : c'est exactement le geste qui butait.
+  // Capture obligatoire, l'événement scroll ne remonte pas dans l'arbre.
+  document.addEventListener('scroll', (e)=>{
+    const el = e.target;
+    if(el && el.classList && el.classList.contains('sheet-scroll') && el.scrollTop <= 0){
+      resetSheetShift();
+    }
+  }, true);
+
   function confirmDialog(message, okLabel, okClass){
     okLabel = okLabel || 'Confirmer';
     okClass = okClass || 'danger-solid';
@@ -1133,7 +1154,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '5.3';
+  const APP_VERSION = '5.4';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
