@@ -1154,7 +1154,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '5.4';
+  const APP_VERSION = '5.5';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -1193,7 +1193,9 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       updated.dateTraitement = '';
       updated.traitePar = '';
       updated.traiteParUid = '';
-      updated.archived = false;
+      // Traitement annulé : retour au comportement automatique.
+      updated.archived = null;
+      updated.keepActive = false;
     }
     const ok = await saveAnomalyDoc(updated);
     if(ok) haptic(18);
@@ -1236,7 +1238,12 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   // 24 h après avoir été passée en "Traité".
   function isArchived(a){
     if(a.archived === true) return true;
-    if(a.archived === false) return false; // ressortie manuellement de l'historique
+    // Ressortie manuellement de l'historique : reste dans la liste active.
+    // Ce sens avait été confié à archived === false, que le reste du code écrivait
+    // aussi comme simple remise à zéro — dès la création de chaque anomalie.
+    // Résultat : aucune ne s'archivait jamais d'elle-même. Le rôle est désormais
+    // tenu par un champ dédié, et archived === false ne signifie plus rien.
+    if(a.keepActive === true) return false;
     if(a.statut !== 'Traité') return false;
     const ref = a.treatedAt || a.updatedAt;
     if(!ref) return false;
@@ -2154,6 +2161,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
           const ok = await saveAnomalyDoc({
             ...existing,
             archived: true,
+            keepActive: false,
             treatedAt: existing.treatedAt || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             updatedBy: profile.name || 'Anonyme',
@@ -2168,7 +2176,8 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
         unarchiveBtn.addEventListener('click', async ()=>{
           const ok = await saveAnomalyDoc({
             ...existing,
-            archived: false,
+            archived: null,
+            keepActive: true,
             treatedAt: null,
             updatedAt: new Date().toISOString(),
             updatedBy: profile.name || 'Anonyme',
@@ -2364,7 +2373,9 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       }else{
         payload.treatedAt = null;
         payload.traiteParUid = '';
-        payload.archived = false;
+        // Pas (ou plus) traitée : retour au comportement automatique.
+        payload.archived = null;
+        payload.keepActive = false;
       }
       let finalItem;
       if(editing){
