@@ -321,6 +321,7 @@
   @media (max-width:684px){ .fab{ right:22px; } }
   .fab:active{transform:scale(0.94);}
 
+
   /* ---------- Modal / sheet ---------- */
   .overlay{
     position:fixed; inset:0; background:rgba(8,10,13,0.6); z-index:50;
@@ -609,6 +610,76 @@
   .loading-screen{display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:70vh; color:var(--text-dim); gap:10px;}
   .spinner{width:22px; height:22px; border-radius:50%; border:2px solid var(--line); border-top-color:var(--accent); animation:spin 0.8s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ---------- Grand écran (PC, tablette en paysage) ----------
+     Tout ce bloc ne s'applique qu'à partir de 1100 px de large : le téléphone
+     n'est pas concerné. Aucune balise n'a été ajoutée, seule la disposition des
+     éléments existants change :
+     - barre latérale : synchronisation, compteurs, filtres, recherche ;
+     - catégories sur deux colonnes, qui défilent seules (la barre reste en place) ;
+     - le bouton + devient « + Nouvelle anomalie » en bas de la barre ;
+     - les fiches s'ouvrent en fenêtre centrée plutôt qu'en tiroir. */
+  @media (min-width:1100px){
+    #app{
+      max-width:1360px; height:100vh; height:100dvh; padding-bottom:0; overflow:hidden;
+      display:grid; grid-template-columns:280px minmax(0,1fr);
+      grid-template-rows:auto auto auto 1fr;
+      grid-template-areas:"top top" "sync main" "stats main" "ctrl main";
+    }
+    #modalRoot{display:contents;}
+
+    .topbar{grid-area:top; position:static; flex-direction:row; align-items:center; gap:16px; padding:14px 24px;}
+    .topbar-row{display:contents;}
+    .brand{order:1;}
+    .brand h1{font-size:20px;}
+    .date-line{order:2; padding-top:3px;}
+    .header-actions{order:3; margin-left:auto; gap:8px;}
+
+    .sync-row{grid-area:sync; padding:20px 20px 14px;}
+    .stats-bar{grid-area:stats; flex-direction:column; gap:7px; padding:0 20px 18px;}
+    .stat-pill{flex-direction:row-reverse; justify-content:space-between; align-items:center; padding:10px 13px;}
+    .stat-pill .lbl{font-size:11px;}
+    .controls{grid-area:ctrl; padding:0 20px 90px; align-self:start;}
+    .chips{flex-direction:column; overflow:visible; gap:5px; padding-bottom:14px;}
+    .chip{text-align:left; padding:8px 14px;}
+    .chip:hover:not([data-active="true"]){border-color:var(--text-faint); color:var(--text);}
+
+    .rail{
+      grid-area:main; min-height:0; overflow-y:auto; margin:0;
+      border-left:1px solid var(--line); padding:20px 24px 40px;
+      display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px;
+      align-items:start; align-content:start;
+    }
+    .rail > *:not(.category){grid-column:1 / -1;}
+    .rail .category{margin-bottom:0;}
+    /* Une catégorie dépliée prend toute la largeur et range ses fiches sur deux
+       colonnes. Sans cela, sa voisine de ligne restait seule face à un grand vide.
+       Les catégories repliées, de hauteur égale, continuent d'aller par deux, et
+       l'ordre fixe des catégories est conservé. */
+    .rail .category[data-open="true"]{grid-column:1 / -1;}
+    .rail .category[data-open="true"] .category-body{
+      display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px; align-items:start;
+    }
+    .rail .category-body > *{margin-bottom:0;}
+    .rail .category-body > *:not(.anomaly-card){grid-column:1 / -1;}
+
+    .fab{
+      left:calc(max(0px, (100vw - 1360px) / 2) + 20px); right:auto; bottom:20px;
+      width:240px; height:46px; border-radius:10px; font-size:0;
+    }
+    .fab::before{content:'+ Nouvelle anomalie'; font-size:14px; font-weight:600; font-family:inherit;}
+    .fab:hover{filter:brightness(1.08);}
+
+    .new-banner{
+      left:calc(max(0px, (100vw - 1360px) / 2) + 304px);
+      right:calc(max(0px, (100vw - 1360px) / 2) + 24px);
+      bottom:24px; max-width:560px;
+    }
+
+    .overlay{align-items:center; padding:24px;}
+    .sheet{max-width:620px; max-height:88vh; border-radius:16px; border-bottom:1px solid var(--line);}
+    .sheet-handle{display:none;}
+  }
 </style>
 </head>
 <body>
@@ -1154,7 +1225,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '5.5';
+  const APP_VERSION = '5.6';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -2767,6 +2838,9 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       if(si) si.value = '';
       expanded.clear();
       window.scrollTo(0, 0);
+      // Sur grand écran, c'est la liste qui défile, pas la page.
+      const rail = $('#categoryList');
+      if(rail) rail.scrollTop = 0;
       render();
     });
     $('#themeBtn').addEventListener('click', ()=>{
