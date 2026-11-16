@@ -17,6 +17,13 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Anomalies">
 <script>
+  // Affichée dans un cadre (page SharePoint) : mode compact.
+  // Posé ici, avant l'affichage, pour éviter un saut de mise en page au chargement.
+  (function(){
+    var emb = true;
+    try{ emb = window.self !== window.top; }catch(e){}
+    if(emb) document.documentElement.classList.add('emb');
+  })();
   (function(){
     try{
       if(localStorage.getItem('anomalies_theme') === 'light'){
@@ -611,15 +618,18 @@
   .spinner{width:22px; height:22px; border-radius:50%; border:2px solid var(--line); border-top-color:var(--accent); animation:spin 0.8s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg);}}
 
+  /* Bouton plein écran : réservé aux grands écrans (voir plus bas). */
+  .fs-btn{display:none;}
+
   /* ---------- Grand écran (PC, tablette en paysage) ----------
-     Tout ce bloc ne s'applique qu'à partir de 1100 px de large : le téléphone
+     Tout ce bloc ne s'applique qu'à partir de 900 px de large : le téléphone
      n'est pas concerné. Aucune balise n'a été ajoutée, seule la disposition des
      éléments existants change :
      - barre latérale : synchronisation, compteurs, filtres, recherche ;
      - catégories sur deux colonnes, qui défilent seules (la barre reste en place) ;
      - le bouton + devient « + Nouvelle anomalie » en bas de la barre ;
      - les fiches s'ouvrent en fenêtre centrée plutôt qu'en tiroir. */
-  @media (min-width:1100px){
+  @media (min-width:900px){
     #app{
       max-width:1360px; height:100vh; height:100dvh; padding-bottom:0; overflow:hidden;
       display:grid; grid-template-columns:280px minmax(0,1fr);
@@ -649,6 +659,11 @@
       border-left:1px solid var(--line); padding:20px 24px 40px;
       display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px;
       align-items:start; align-content:start;
+      /* Indispensable : la liste a une hauteur fixe et les catégories masquent
+         leur débordement. Sans cette ligne, le navigateur écrase les lignes pour
+         tout faire tenir, et une catégorie dépliée recouvre les suivantes dès
+         que l'écran (ou le cadre SharePoint) manque de hauteur. */
+      grid-auto-rows:max-content;
     }
     .rail > *:not(.category){grid-column:1 / -1;}
     .rail .category{margin-bottom:0;}
@@ -679,6 +694,48 @@
     .overlay{align-items:center; padding:24px;}
     .sheet{max-width:620px; max-height:88vh; border-radius:16px; border-bottom:1px solid var(--line);}
     .sheet-handle{display:none;}
+
+    .fs-btn{display:flex;}
+    .fs-btn[data-unavailable]{display:none;}
+
+    /* ---------- Intégré dans une page (SharePoint) ----------
+       Cadre de taille fixe : tout tient dedans, seule la liste défile.
+       Marges, en-tête et tailles resserrés ; la date du jour est retirée. */
+    html.emb, html.emb body{overflow:hidden;}
+    html.emb #app{max-width:none; grid-template-columns:232px minmax(0,1fr);}
+    html.emb .topbar{padding:8px 16px; gap:12px;}
+    html.emb .date-line{display:none;}
+    html.emb .brand-icon{width:28px; height:28px; border-radius:7px;}
+    html.emb .brand-icon svg{width:16px; height:16px;}
+    html.emb .brand h1{font-size:16px;}
+    html.emb .header-actions{gap:6px;}
+    html.emb .icon-btn, html.emb .avatar-btn{width:32px; height:32px;}
+    html.emb .icon-btn svg{width:16px; height:16px;}
+    html.emb .sync-row{padding:12px 14px 10px;}
+    html.emb .stats-bar{gap:5px; padding:0 14px 12px;}
+    html.emb .stat-pill{padding:7px 11px;}
+    html.emb .stat-pill .num{font-size:14px;}
+    html.emb .controls{padding:0 14px 66px;}
+    html.emb .chips{gap:4px; padding-bottom:10px;}
+    html.emb .chip{padding:6px 12px; font-size:12.5px;}
+    html.emb #searchInput{padding:8px 10px; font-size:13px;}
+    html.emb .rail{padding:14px 16px 24px; gap:10px; scrollbar-width:thin;}
+    html.emb .fab{left:14px; bottom:12px; width:204px; height:40px;}
+    html.emb .fab::before{font-size:13px;}
+    html.emb .new-banner{left:248px; right:16px; bottom:14px;}
+    html.emb .overlay{padding:12px;}
+    html.emb .sheet{max-height:94vh;}
+  }
+  /* Très grand écran (PC 1920 px, plein écran) : trois colonnes, pour les
+     catégories repliées comme pour les fiches d'une catégorie dépliée. */
+  @media (min-width:1600px){
+    .rail{grid-template-columns:repeat(3, minmax(0,1fr));}
+    .rail .category[data-open="true"] .category-body{grid-template-columns:repeat(3, minmax(0,1fr));}
+  }
+  /* Grand écran étroit (cadre SharePoint, petit portable) : la liste passe sur
+     une colonne, sinon chaque catégorie serait trop étroite pour être lisible. */
+  @media (min-width:900px) and (max-width:1179px){
+    .rail{grid-template-columns:minmax(0,1fr);}
   }
 </style>
 </head>
@@ -705,6 +762,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8Z"/><path d="M3 8 4.4 4.6A1.6 1.6 0 0 1 5.9 3.6h12.2a1.6 1.6 0 0 1 1.5 1L21 8"/><path d="M10 12h4"/></svg>
         </button>
         <button class="icon-btn" id="themeBtn" title="Changer l'apparence" aria-label="Changer l'apparence"></button>
+        <button class="icon-btn fs-btn" id="fullscreenBtn" title="Plein écran" aria-label="Plein écran"></button>
         <button class="icon-btn" id="settingsBtn" title="Réglages" aria-label="Réglages">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/></svg>
         </button>
@@ -1225,7 +1283,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '5.6';
+  const APP_VERSION = '5.8';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -2843,6 +2901,44 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       if(rail) rail.scrollTop = 0;
       render();
     });
+    // Plein écran. Dans SharePoint, il faut que le cadre l'autorise
+    // (allowfullscreen) ; sinon, on ouvre l'application dans un nouvel onglet.
+    (function setupFullscreen(){
+      const btn = $('#fullscreenBtn');
+      if(!btn) return;
+      const root = document.documentElement;
+      const embedded = root.classList.contains('emb');
+      const canFs = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+      if(!canFs && !embedded){ btn.dataset.unavailable = '1'; return; }
+      const isFs = ()=> !!(document.fullscreenElement || document.webkitFullscreenElement);
+      const ENTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg>';
+      const EXIT  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4"/><path d="M15 4v5h5"/><path d="M9 20v-5H4"/><path d="M15 20v-5h5"/></svg>';
+      const openTab = ()=> window.open(location.href, '_blank', 'noopener');
+      function paint(){
+        const on = isFs();
+        btn.innerHTML = on ? EXIT : ENTER;
+        const label = on ? 'Quitter le plein écran'
+          : (canFs ? 'Plein écran' : 'Ouvrir en grand dans un nouvel onglet');
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
+      }
+      btn.addEventListener('click', ()=>{
+        if(!canFs){ openTab(); return; }
+        if(isFs()){
+          (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+          return;
+        }
+        const req = root.requestFullscreen || root.webkitRequestFullscreen;
+        try{
+          const pr = req.call(root);
+          if(pr && pr.catch) pr.catch(()=>{ if(embedded) openTab(); });
+        }catch(e){ if(embedded) openTab(); }
+      });
+      document.addEventListener('fullscreenchange', paint);
+      document.addEventListener('webkitfullscreenchange', paint);
+      paint();
+    })();
+
     $('#themeBtn').addEventListener('click', ()=>{
       setTheme(getTheme() === 'light' ? 'dark' : 'light');
       updateThemePill();
