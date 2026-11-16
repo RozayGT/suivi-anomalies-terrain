@@ -695,8 +695,6 @@
     .sheet{max-width:620px; max-height:88vh; border-radius:16px; border-bottom:1px solid var(--line);}
     .sheet-handle{display:none;}
 
-    .fs-btn{display:flex;}
-    .fs-btn[data-unavailable]{display:none;}
 
     /* ---------- Intégré dans une page (SharePoint) ----------
        Cadre de taille fixe : tout tient dedans, seule la liste défile.
@@ -725,12 +723,32 @@
     html.emb .new-banner{left:248px; right:16px; bottom:14px;}
     html.emb .overlay{padding:12px;}
     html.emb .sheet{max-height:94vh;}
+
+    /* ---------- Plein écran (bouton ⛶) ----------
+       Affichage normal en grand, sur toute la largeur de l'écran. */
+    html.fs #app{max-width:none;}
+    html.fs .fab{left:20px;}
+    html.fs .new-banner{left:304px; right:24px;}
   }
-  /* Très grand écran (PC 1920 px, plein écran) : trois colonnes, pour les
-     catégories repliées comme pour les fiches d'une catégorie dépliée. */
+  /* Bouton plein écran : PC uniquement — écran large ET souris.
+     Jamais sur téléphone ou tablette tactile. */
+  @media (min-width:900px) and (pointer:fine){
+    .fs-btn{display:flex;}
+  }
+  .fs-btn[data-unavailable]{display:none !important;}
+  /* Jamais quand l'application est installée sur l'écran d'accueil. */
+  @media (display-mode:standalone){
+    .fs-btn{display:none !important;}
+  }
+  /* Très grand écran (PC 1920 px) : trois colonnes, pour les catégories repliées
+     comme pour les fiches d'une catégorie dépliée. Seulement quand l'application
+     occupe toute la largeur (SharePoint ou plein écran) : ouverte directement dans
+     le navigateur, elle reste limitée à 1360 px et trois colonnes y seraient
+     trop étroites. */
   @media (min-width:1600px){
-    .rail{grid-template-columns:repeat(3, minmax(0,1fr));}
-    .rail .category[data-open="true"] .category-body{grid-template-columns:repeat(3, minmax(0,1fr));}
+    html.emb .rail, html.fs .rail{grid-template-columns:repeat(3, minmax(0,1fr));}
+    html.emb .rail .category[data-open="true"] .category-body,
+    html.fs .rail .category[data-open="true"] .category-body{grid-template-columns:repeat(3, minmax(0,1fr));}
   }
   /* Grand écran étroit (cadre SharePoint, petit portable) : la liste passe sur
      une colonne, sinon chaque catégorie serait trop étroite pour être lisible. */
@@ -1283,7 +1301,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '5.8';
+  const APP_VERSION = '5.9';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -1930,6 +1948,35 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     });
   }
 
+  // Application installée sur l'écran d'accueil (Android, iPhone).
+  function isInstalledApp(){
+    try{
+      if(window.matchMedia('(display-mode: standalone)').matches) return true;
+    }catch(e){}
+    return window.navigator.standalone === true;
+  }
+  // PC : écran large, souris, et pas l'application installée. Même règle que
+  // l'affichage du bouton plein écran.
+  function isDesktop(){
+    try{
+      return window.matchMedia('(min-width:900px) and (pointer:fine)').matches && !isInstalledApp();
+    }catch(e){ return false; }
+  }
+
+  // Page « Sur PC » du tutoriel : insérée avant la dernière page, et seulement
+  // sur PC — sur téléphone, le tutoriel reste exactement le même qu'avant.
+  const TUTORIAL_STEP_PC = {
+    icon: '\u{1F5A5}\uFE0F',
+    title: 'Sur PC',
+    text: "Sur un ordinateur, l'application s'affiche en grand : compteurs, filtres et recherche \u00e0 gauche, cat\u00e9gories \u00e0 droite.\n\nLe bouton \u26F6 en haut de l'\u00e9cran passe l'application en plein \u00e9cran, pratique notamment depuis la page SharePoint. Pour revenir \u00e0 l'affichage normal, cliquez de nouveau sur le bouton ou appuyez sur la touche \u00c9chap."
+  };
+  function tutorialSteps(){
+    if(!isDesktop()) return TUTORIAL_STEPS;
+    const steps = TUTORIAL_STEPS.slice();
+    steps.splice(steps.length - 1, 0, TUTORIAL_STEP_PC);
+    return steps;
+  }
+
   const TUTORIAL_STEPS = [
     {
       icon: '\u{1F689}',
@@ -1987,7 +2034,8 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     modalOpen = true;
     lockBodyScroll();
     let step = 0;
-    const total = TUTORIAL_STEPS.length;
+    const STEPS = tutorialSteps();
+    const total = STEPS.length;
 
     // « Terminer » et « Passer » valent renoncement explicite : on retient.
     // La croix et l'appui à l'extérieur sont des réflexes de fermeture : on ne
@@ -2001,7 +2049,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }
 
     function renderStep(direction){
-      const s = TUTORIAL_STEPS[step];
+      const s = STEPS[step];
       $('#modalRoot').innerHTML = `
         <div class="overlay" id="overlayEl">
           <div class="sheet">
@@ -2014,7 +2062,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
                 <p class="tuto-text">${escapeHtml(s.text)}</p>
               </div>
               <div class="tuto-dots">
-                ${TUTORIAL_STEPS.map((_, i) => `<span class="dot${i === step ? ' active' : ''}" data-step="${i}"></span>`).join('')}
+                ${STEPS.map((_, i) => `<span class="dot${i === step ? ' active' : ''}" data-step="${i}"></span>`).join('')}
               </div>
             </div>
             <div class="sheet-actions">
@@ -2907,10 +2955,21 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
       const btn = $('#fullscreenBtn');
       if(!btn) return;
       const root = document.documentElement;
-      const embedded = root.classList.contains('emb');
+      let embedded = true;
+      try{ embedded = window.self !== window.top; }catch(e){}
+      // Application installée sur l'écran d'accueil : jamais de bouton.
+      if(isInstalledApp()){ btn.dataset.unavailable = '1'; return; }
       const canFs = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
       if(!canFs && !embedded){ btn.dataset.unavailable = '1'; return; }
       const isFs = ()=> !!(document.fullscreenElement || document.webkitFullscreenElement);
+      // En plein écran : affichage normal en grand (« fs ») au lieu du mode compact.
+      // En sortant : retour au mode compact si l'application est dans un cadre.
+      function syncClasses(){
+        const on = isFs();
+        root.classList.toggle('fs', on);
+        if(on) root.classList.remove('emb');
+        else if(embedded) root.classList.add('emb');
+      }
       const ENTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg>';
       const EXIT  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4"/><path d="M15 4v5h5"/><path d="M9 20v-5H4"/><path d="M15 20v-5h5"/></svg>';
       const openTab = ()=> window.open(location.href, '_blank', 'noopener');
@@ -2934,8 +2993,9 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
           if(pr && pr.catch) pr.catch(()=>{ if(embedded) openTab(); });
         }catch(e){ if(embedded) openTab(); }
       });
-      document.addEventListener('fullscreenchange', paint);
-      document.addEventListener('webkitfullscreenchange', paint);
+      function onChange(){ syncClasses(); paint(); }
+      document.addEventListener('fullscreenchange', onChange);
+      document.addEventListener('webkitfullscreenchange', onChange);
       paint();
     })();
 
