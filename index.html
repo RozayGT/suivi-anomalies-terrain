@@ -836,7 +836,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
 import {
   initializeFirestore, persistentLocalCache, persistentSingleTabManager,
-  collection, doc, setDoc, deleteDoc, getDoc, getDocFromCache, onSnapshot
+  collection, doc, setDoc, deleteDoc, getDoc, getDocFromCache, getDocFromServer, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
 import {
   getAuth, signInAnonymously, onAuthStateChanged
@@ -1110,8 +1110,8 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     try{ return writeWithoutWaitingServer(deleteDoc(doc(db, ANOMALIES_COL, id))); }
     catch(e){ console.error(e); return Promise.resolve(false); }
   }
-  function savePhotoDoc(id, dataUrl){
-    try{ return writeWithoutWaitingServer(setDoc(doc(db, PHOTOS_COL, id), {data: dataUrl}), 2500); }
+  function savePhotoDoc(id, dataUrl, extra){
+    try{ return writeWithoutWaitingServer(setDoc(doc(db, PHOTOS_COL, id), {data: dataUrl, ...(extra || {})}), 2500); }
     catch(e){ console.error(e); return Promise.resolve(false); }
   }
   function deletePhotoDoc(id){
@@ -1301,7 +1301,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }, 5000);
   }
 
-  const APP_VERSION = '5.9';
+  const APP_VERSION = '6.1';
   const MAX_PHOTOS = 4;
   // Numéro d'ordre de l'anomalie au sein de sa catégorie, extrait de l'identifiant
   // (CDV-002 → 2). L'identifiant complet reste utilisé dans la fiche et l'export.
@@ -1655,24 +1655,41 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     }catch(e){ /* ignore */ }
     // On publie la photo pour que les collègues la voient sur les anomalies.
     // Deux clés : l'identifiant (stable) et le nom (pour les anciennes anomalies).
+    // Chaque publication est datée : sur les cartes, la photo la plus récente
+    // l'emporte. Indispensable quand une même personne utilise plusieurs appareils
+    // (ou a réinstallé l'application) : ses anciennes anomalies portent
+    // l'identifiant de l'autre appareil, qui gardait sinon l'ancienne photo.
+    // Un retrait est daté lui aussi (photo vide), pour l'emporter sur une photo
+    // plus ancienne publiée depuis un autre appareil.
+    const at = Date.now();
     const keys = [];
     if(currentUid) keys.push('avatar_' + currentUid);
     const nameKey = avatarKeyFor(profile.name);
     if(nameKey) keys.push(nameKey);
     keys.forEach(key=>{
-      if(dataUrl){
-        avatarCache.set(key, dataUrl);
-        savePhotoDoc(key, dataUrl);
-      }else{
-        avatarCache.set(key, null);
-        deletePhotoDoc(key);
-      }
+      avatarCache.set(key, {url: dataUrl || null, at});
+      avatarRefreshed.add(key);
+      savePhotoDoc(key, dataUrl || '', {updatedAt: at});
     });
   }
 
   // ---- Avatars des collègues ----
-  const avatarCache = new Map();   // clé de photo → dataURL ou null
+  // clé de photo → {url: dataURL ou null, at: date de publication}
+  // at = 0 : photo publiée avant la datation ; at = -1 : aucune photo enregistrée.
+  const avatarCache = new Map();
   const avatarPending = new Set();
+  // Clés déjà relues depuis le serveur. Avant, une photo mise en mémoire une fois
+  // n'était plus jamais relue : un changement de photo restait invisible pour
+  // les collègues.
+  const avatarRefreshed = new Set();
+  let avatarRefreshedAt = Date.now();
+  // Retour à l'écran après plus d'une heure : on relira les photos.
+  function expireAvatarRefresh(){
+    if(Date.now() - avatarRefreshedAt > 3600e3){
+      avatarRefreshed.clear();
+      avatarRefreshedAt = Date.now();
+    }
+  }
   function normalizeName(name){
     return (name || '').trim().toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -1686,30 +1703,86 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     return n ? 'avatar_' + n : '';
   }
   function avatarKeyFor(name){ return avatarKey('', name); }
+  // Les deux clés d'une personne : son identifiant d'appareil et son nom.
+  function avatarKeysOf(uid, name){
+    const keys = [];
+    if(uid) keys.push('avatar_' + uid);
+    const nk = avatarKeyFor(name);
+    if(nk && !keys.includes(nk)) keys.push(nk);
+    return keys;
+  }
+  // Photo d'une personne : la plus récente des deux clés. À égalité (photos
+  // antérieures à la datation), l'identifiant l'emporte, comme avant.
   function avatarFor(uid, name){
-    const key = avatarKey(uid, name);
-    if(!key) return null;
-    return avatarCache.has(key) ? avatarCache.get(key) : undefined; // undefined = pas encore chargé
+    const keys = avatarKeysOf(uid, name);
+    if(!keys.length) return null;
+    let best;
+    keys.forEach(k=>{
+      if(!avatarCache.has(k)) return;
+      const e = avatarCache.get(k);
+      if(best === undefined || e.at > best.at) best = e;
+    });
+    if(best === undefined) return undefined; // pas encore chargé
+    return best.url || null;
+  }
+  // Lecture d'une photo de profil. fromServer : relecture du serveur, limitée
+  // à quelques secondes pour ne jamais faire attendre l'affichage.
+  async function readAvatarDoc(key, fromServer){
+    try{
+      const ref = doc(db, PHOTOS_COL, key);
+      const snap = fromServer
+        ? await Promise.race([
+            getDocFromServer(ref),
+            new Promise((_, reject)=> setTimeout(()=> reject(new Error('delai')), 4000)),
+          ])
+        : await getDocFromCache(ref);
+      if(!snap.exists()) return {url: null, at: -1};
+      const d = snap.data() || {};
+      return {url: d.data || null, at: typeof d.updatedAt === 'number' ? d.updatedAt : 0};
+    }catch(e){ return null; } // hors ligne, absent du cache, délai dépassé
   }
   // Récupère en arrière-plan les photos des personnes visibles à l'écran,
   // puis rafraîchit l'affichage une fois qu'elles sont disponibles.
+  // Deux temps : d'abord la copie locale (affichage immédiat, même hors ligne),
+  // puis une relecture du serveur, qui rattrape les photos changées entre-temps.
   async function loadAvatarsFor(people){
-    const todo = [];
+    const wanted = new Set();
     people.forEach(p=>{
-      const key = typeof p === 'string' ? avatarKey('', p) : avatarKey(p.uid, p.name);
-      if(!key || avatarCache.has(key) || avatarPending.has(key)) return;
-      avatarPending.add(key);
-      todo.push(key);
+      const uid = typeof p === 'string' ? '' : (p.uid || '');
+      const name = typeof p === 'string' ? p : p.name;
+      avatarKeysOf(uid, name).forEach(k=> wanted.add(k));
     });
+    const todo = [...wanted].filter(k=> !avatarPending.has(k)
+      && (!avatarCache.has(k) || !avatarRefreshed.has(k)));
     if(!todo.length) return;
-    let changed = false;
-    for(const key of todo){
-      const url = await getPhotoDoc(key);
-      avatarCache.set(key, url || null);
-      avatarPending.delete(key);
-      if(url) changed = true;
+    todo.forEach(k=> avatarPending.add(k));
+    const differs = (a, b)=> !a || a.url !== b.url || a.at !== b.at;
+    try{
+      let changed = false;
+      for(const key of todo){
+        if(avatarCache.has(key)) continue;
+        const local = await readAvatarDoc(key, false);
+        if(local){ avatarCache.set(key, local); changed = true; }
+        else if(!navigator.onLine){ avatarCache.set(key, {url: null, at: -1}); }
+      }
+      if(changed && !modalOpen) render();
+
+      if(!navigator.onLine) return;
+      changed = false;
+      for(const key of todo){
+        if(avatarRefreshed.has(key)) continue;
+        const remote = await readAvatarDoc(key, true);
+        if(!remote) continue; // réessayé plus tard
+        avatarRefreshed.add(key);
+        if(differs(avatarCache.get(key), remote)){
+          avatarCache.set(key, remote);
+          changed = true;
+        }
+      }
+      if(changed && !modalOpen) render();
+    }finally{
+      todo.forEach(k=> avatarPending.delete(k));
     }
-    if(changed && !modalOpen) render();
   }
   // Recadrage carré centré puis réduction : une photo d'avatar reste légère.
   async function makeAvatarFromFile(file, size){
@@ -1968,7 +2041,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
   const TUTORIAL_STEP_PC = {
     icon: '\u{1F5A5}\uFE0F',
     title: 'Sur PC',
-    text: "Sur un ordinateur, l'application s'affiche en grand : compteurs, filtres et recherche \u00e0 gauche, cat\u00e9gories \u00e0 droite.\n\nLe bouton \u26F6 en haut de l'\u00e9cran passe l'application en plein \u00e9cran, pratique notamment depuis la page SharePoint. Pour revenir \u00e0 l'affichage normal, cliquez de nouveau sur le bouton ou appuyez sur la touche \u00c9chap."
+    text: "Le bouton \u26F6 en haut de l'écran passe l'application en plein écran.\n\nPour revenir : touche Échap, ou nouveau clic sur le bouton."
   };
   function tutorialSteps(){
     if(!isDesktop()) return TUTORIAL_STEPS;
@@ -1977,56 +2050,42 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
     return steps;
   }
 
+  // Tutoriel volontairement court : une idée par page, une ou deux phrases.
   const TUTORIAL_STEPS = [
     {
       icon: '\u{1F689}',
       title: 'Bienvenue',
-      text: "Cette application permet \u00e0 toute l'\u00e9quipe de signaler et suivre les anomalies terrain. Tout est partag\u00e9 en temps r\u00e9el : ce que vous saisissez appara\u00eet imm\u00e9diatement chez vos coll\u00e8gues.\n\nCe guide fait le tour de l'essentiel en quelques \u00e9crans. Glissez vers la gauche pour avancer."
+      text: "Signalez et suivez les anomalies terrain avec toute l'équipe. Tout est partagé en temps réel.\n\nGlissez vers la gauche pour avancer."
     },
     {
       icon: '\u{1F4CB}',
-      title: "L'\u00e9cran d'accueil",
-      text: "Les anomalies sont regroup\u00e9es par type d'\u00e9quipement : Per\u00e7age/Insert, Aiguille, Signaux\u2026 Touchez une cat\u00e9gorie pour la d\u00e9plier ; celles sans anomalie restent gris\u00e9es.\n\nSur chaque anomalie, la bande de couleur \u00e0 gauche donne le statut d'un coup d'\u0153il : rouge non trait\u00e9, orange en cours, vert trait\u00e9. \u00c0 droite : la priorit\u00e9, le num\u00e9ro d'ordre dans la cat\u00e9gorie, et la personne concern\u00e9e \u2014 celle qui a cr\u00e9\u00e9 l'anomalie, ou celle qui l'a trait\u00e9e une fois le travail fait."
+      title: "L'accueil",
+      text: "Les anomalies sont rangées par équipement : touchez une catégorie pour l'ouvrir.\n\nLa couleur à gauche donne le statut : rouge non traité, orange en cours, vert traité."
     },
     {
       icon: '\u2795',
-      title: 'Cr\u00e9er une anomalie',
-      text: "Appuyez sur le bouton + en bas \u00e0 droite, choisissez la cat\u00e9gorie, puis remplissez la fiche : voie, PK, \u00e9quipement, description et priorit\u00e9.\n\nSi une anomalie non trait\u00e9e existe d\u00e9j\u00e0 sur la m\u00eame voie et le m\u00eame \u00e9quipement, l'application vous pr\u00e9vient avant d'enregistrer, pour \u00e9viter les doublons."
-    },
-    {
-      icon: '\u{1F4F7}',
-      title: 'Joindre des photos',
-      text: "Jusqu'\u00e0 4 photos par anomalie, prises sur le moment ou choisies dans la galerie. Elles sont compress\u00e9es automatiquement.\n\nTouchez une photo pour l'agrandir : pincez ou double-tapez pour zoomer, glissez pour passer \u00e0 la suivante."
+      title: 'Ajouter une anomalie',
+      text: "Bouton + en bas à droite. Choisissez la catégorie, remplissez la fiche et ajoutez jusqu'à 4 photos."
     },
     {
       icon: '\u26A1',
-      title: 'Faire avancer le traitement',
-      text: "Sur chaque anomalie, touchez la pastille de statut pour la faire avancer sans ouvrir la fiche : Non trait\u00e9 \u2192 En cours \u2192 Trait\u00e9. La bande de couleur \u00e0 gauche suit imm\u00e9diatement.\n\nAu passage en \u00ab Trait\u00e9 \u00bb, la date du jour et votre nom se remplissent tout seuls."
+      title: 'Changer le statut',
+      text: "Touchez la pastille de statut : Non traité → En cours → Traité.\n\nVotre nom et la date se remplissent tout seuls."
     },
     {
       icon: '\u{1F50D}',
       title: 'Retrouver une anomalie',
-      text: "La barre de recherche fouille dans la voie, le PK, l'\u00e9quipement et la description.\n\nLes filtres juste au-dessus permettent de n'afficher qu'un statut donn\u00e9, ou \u00ab Les miennes \u00bb pour ne voir que ce que vous avez cr\u00e9\u00e9 ou trait\u00e9."
-    },
-    {
-      icon: '\u{1F5C2}',
-      title: "L'historique",
-      text: "Pour garder un accueil lisible, les anomalies trait\u00e9es sont archiv\u00e9es automatiquement 24 h apr\u00e8s leur traitement. Vous pouvez aussi les archiver tout de suite depuis leur fiche.\n\nLe bouton \u{1F5C2} en haut de l'\u00e9cran donne acc\u00e8s \u00e0 l'historique complet, et permet de ressortir une anomalie si besoin."
+      text: "Cherchez par lieu, PK, équipement ou description.\n\n« Les miennes » n'affiche que vos anomalies."
     },
     {
       icon: '\u{1F514}',
-      title: '\u00cAtre pr\u00e9venu',
-      text: "\u00c0 l'ouverture, un message vous indique les anomalies ajout\u00e9es par vos coll\u00e8gues depuis votre derni\u00e8re visite. Touchez-le pour les afficher directement.\n\nPour aller plus loin, ouvrez les r\u00e9glages (\u2699\uFE0F en haut de l'\u00e9cran) et activez les notifications : vous serez alors averti sur votre t\u00e9l\u00e9phone m\u00eame application ferm\u00e9e. \u00c0 faire une fois sur chaque t\u00e9l\u00e9phone."
+      title: 'Être prévenu',
+      text: "À l'ouverture, un bandeau rouge signale ce qui a été ajouté en votre absence.\n\nPour être prévenu même application fermée, activez les notifications dans les réglages \u2699\uFE0F."
     },
     {
-      icon: '\u{1F4F6}',
-      title: 'Sans r\u00e9seau',
-      text: "Sur le terrain sans couverture, vous pouvez consulter les anomalies, leurs photos, et en cr\u00e9er de nouvelles normalement.\n\nRestez simplement sur l'application jusqu'au message de confirmation avant de la fermer. Tout repart automatiquement d\u00e8s le retour du r\u00e9seau : l'indicateur en haut de l'\u00e9cran passe alors au vert."
-    },
-    {
-      icon: '\u2699\uFE0F',
-      title: 'Compte et r\u00e9glages',
-      text: "Quatre boutons en haut de l'\u00e9cran : l'historique, le soleil ou la lune pour changer d'apparence d'un geste, l'engrenage des r\u00e9glages, et votre pastille de profil.\n\nLe profil sert \u00e0 votre nom affich\u00e9 et \u00e0 votre photo : les deux apparaissent aupr\u00e8s de vos coll\u00e8gues sur les anomalies que vous ajoutez ou traitez. Les r\u00e9glages regroupent le mode sombre, les notifications, l'export CSV, la recherche de mise \u00e0 jour et ce tutoriel. Les fl\u00e8ches \u2039 et \u203a font passer d'un \u00e9cran \u00e0 l'autre.\n\nBonne utilisation !"
+      icon: '\u2705',
+      title: "C'est parti",
+      text: "Sans réseau, tout fonctionne : vos ajouts partiront au retour de la connexion.\n\nLes anomalies traitées passent dans l'historique \u{1F5C2} après 24 h. Votre nom et votre photo se règlent depuis votre pastille de profil."
     },
   ];
 
@@ -2896,6 +2955,7 @@ const PUSH_ENDPOINT = 'https://anomalies-push.jose-goncalves-a74.workers.dev';
         // déplacer le repère.
         freshDataSeenWhileVisible = false;
         armBanner();
+        expireAvatarRefresh();
         setTimeout(()=> checkForNewAnomalies(anomalies), 200);
       }
     });
